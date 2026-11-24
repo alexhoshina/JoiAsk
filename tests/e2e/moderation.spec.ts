@@ -1,4 +1,56 @@
-import { test, expect } from './fixtures.js';
+import { apiData, test, expect } from './fixtures.js';
+
+test('模型图片输入需要重新确认，缺少 API Key 时保留原设置', async ({ adminApi, adminPage }) => {
+  type Settings = { ai_model: string; ai_base_url: string; ai_supports_vision: boolean; ai_api_key_configured: boolean };
+  const getSettings = () => apiData<Settings>(adminApi.get('/api/settings'));
+  const { ai_model, ai_base_url, ai_supports_vision, ai_api_key_configured } = await getSettings();
+  expect(ai_supports_vision).toBe(false);
+  expect(ai_api_key_configured).toBe(false);
+  try {
+    await adminPage.goto('/admin/dashboard/settings/');
+    const vision = adminPage.getByRole('checkbox', { name: '当前模型支持图片输入' });
+    await expect(vision).toBeEnabled();
+    await expect(vision).not.toBeChecked();
+    await vision.check();
+    await adminPage.getByLabel('模型名称').fill('e2e-vision-model');
+    await expect(vision).not.toBeChecked();
+    await vision.check();
+    await adminPage.getByLabel('API 基础地址').fill('https://models.example.com/v1');
+    await expect(vision).not.toBeChecked();
+    await vision.check();
+    await adminPage.getByRole('button', { name: '保存设置' }).click();
+    await expect(adminPage.getByText(/请先填写 AI 服务 API Key/)).toBeVisible();
+    expect(await getSettings()).toMatchObject({ ai_model, ai_base_url, ai_supports_vision: false });
+    await adminPage.reload();
+    await expect(vision).toBeEnabled();
+    await expect(vision).not.toBeChecked();
+  } finally {
+    await apiData(adminApi.put('/api/settings', { data: { ai_model, ai_base_url, ai_supports_vision } }));
+  }
+});
+
+test('审核自动公开默认关闭，开启和关闭后刷新均保留设置', async ({ adminPage, adminApi }) => {
+  const settings = () => apiData<{ ai_auto_publish: boolean }>(adminApi.get('/api/settings'));
+  const original = await settings();
+  expect(original.ai_auto_publish).toBe(false);
+  try {
+    await adminPage.goto('/admin/dashboard/settings/');
+    const toggle = adminPage.getByRole('checkbox', { name: '自动公开 AI 判定为正常的提问' });
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).not.toBeChecked();
+    for (const enabled of [true, false]) {
+      await toggle.setChecked(enabled);
+      await adminPage.getByRole('button', { name: '保存设置' }).click();
+      await expect(adminPage.getByText('保存成功', { exact: true })).toBeVisible();
+      expect((await settings()).ai_auto_publish).toBe(enabled);
+      await adminPage.reload();
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).toBeChecked({ checked: enabled });
+    }
+  } finally {
+    await apiData(adminApi.put('/api/settings', { data: { ai_auto_publish: original.ai_auto_publish } }));
+  }
+});
 
 test('匿名投稿经后台审核公开后可见，撤回公开后不可见', async ({ page, adminPage, dataset }) => {
   const content = `待审核提问 ${dataset.tag.tag_name}`;

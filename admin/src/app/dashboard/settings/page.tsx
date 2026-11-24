@@ -47,11 +47,13 @@ export default function SettingsPage() {
   ) => setEmail((current) => ({ ...current, [key]: value }));
   const [baseURL, setBaseURL] = useState("");
   const [model, setModel] = useState("");
+  const [supportsVision, setSupportsVision] = useState(false);
   const [apiKey, setAPIKey] = useState("");
   const [hasKey, setHasKey] = useState(false);
   const [clearKey, setClearKey] = useState(false);
   const [clearMailPassword, setClearMailPassword] = useState(false);
   const [spamPrompt, setSpamPrompt] = useState("");
+  const [autoPublish, setAutoPublish] = useState(false);
   const [requireVerifiedUserToPost, setRequireVerifiedUserToPost] =
     useState(false);
   const [showAPIKey, setShowAPIKey] = useState(false);
@@ -70,7 +72,9 @@ export default function SettingsPage() {
     setClearMailPassword(false);
     setBaseURL(settings.ai_base_url);
     setModel(settings.ai_model);
+    setSupportsVision(settings.ai_supports_vision);
     setSpamPrompt(settings.spam_prompt);
+    setAutoPublish(settings.ai_auto_publish);
     setRequireVerifiedUserToPost(settings.require_verified_user_to_post);
   }, []);
 
@@ -120,8 +124,10 @@ export default function SettingsPage() {
         ...(isSuperAdmin && profileURL.trim() !== savedProfileURL && { bilibili_profile_url: profileURL.trim() }),
         ai_base_url: baseURL.trim(),
         ai_model: model.trim(),
+        ai_supports_vision: supportsVision,
         ai_api_key: clearKey ? null : apiKey.trim(),
         spam_prompt: spamPrompt.trim(),
+        ai_auto_publish: autoPublish,
         require_verified_user_to_post: requireVerifiedUserToPost,
       });
       if (res.code === 200) {
@@ -363,11 +369,32 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="ai-base-url">API 基础地址</Label>
-            <Input id="ai-base-url" type="url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="https://api.example.com/v1" disabled={isLoading || isSaving} />
+            <Input id="ai-base-url" type="url" value={baseURL} onChange={(event) => {
+              if (event.target.value.trim() !== baseURL.trim()) setSupportsVision(false);
+              setBaseURL(event.target.value);
+            }} placeholder="https://api.example.com/v1" disabled={isLoading || isSaving} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ai-model">模型名称</Label>
-            <Input id="ai-model" value={model} onChange={(event) => setModel(event.target.value)} disabled={isLoading || isSaving} />
+            <Input id="ai-model" value={model} onChange={(event) => {
+              if (event.target.value.trim() !== model.trim()) setSupportsVision(false);
+              setModel(event.target.value);
+            }} disabled={isLoading || isSaving} />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="ai-supports-vision"
+                aria-describedby="ai-supports-vision-help"
+                checked={supportsVision}
+                onCheckedChange={(checked) => setSupportsVision(checked === true)}
+                disabled={isLoading || isSaving}
+              />
+              <Label htmlFor="ai-supports-vision">当前模型支持图片输入</Label>
+            </div>
+            <p id="ai-supports-vision-help" className="text-sm text-muted-foreground">
+              请仅为支持图片输入的模型开启。勾选并保存时，系统会向当前模型发送一张不含投稿内容的测试图。验证通过后，投稿图片会随文字一起发送给模型审核。
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ai-api-key">API 密钥</Label>
@@ -420,6 +447,30 @@ export default function SettingsPage() {
               审核逻辑、输入字段说明和 is_spam JSON 返回格式由系统自动补充。
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>审核自动公开</CardTitle>
+        </CardHeader>
+        <CardContent className="max-w-2xl space-y-2">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="ai-auto-publish"
+              aria-describedby="ai-auto-publish-help"
+              checked={autoPublish}
+              onCheckedChange={(checked) => setAutoPublish(checked === true)}
+              disabled={isLoading || isSaving}
+            />
+            <Label htmlFor="ai-auto-publish">自动公开 AI 判定为正常的提问</Label>
+          </div>
+          <p id="ai-auto-publish-help" className="text-sm text-muted-foreground">
+            开启后，纯文字提问通过 AI 审核即可公开。含图提问需文字和图片均通过审核才能自动公开。未开启图片输入时，正文正常的含图提问仍留在收件箱，等待人工看图。
+          </p>
+          <p className="text-sm text-muted-foreground">
+            低质量提问进入拦截箱。审核服务未配置或审核失败时，提问留在收件箱，等待人工处理。
+          </p>
         </CardContent>
       </Card>
 

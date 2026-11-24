@@ -50,6 +50,8 @@ test('普通管理员可以保存现有设置，不能更改或试读 B 站资�
     await page.goto('/admin/dashboard/settings/');
     const save = page.getByRole('button', { name: '保存设置' });
     await expect(save).toBeEnabled();
+    await expect(page.getByRole('checkbox', { name: '自动公开 AI 判定为正常的提问' })).toBeEnabled();
+    await expect(page.getByRole('checkbox', { name: '当前模型支持图片输入' })).toBeEnabled();
     await expect(page.getByLabel('B 站用户资料接口地址')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '测试连接' })).toHaveCount(0);
     const savedRequest = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/settings');

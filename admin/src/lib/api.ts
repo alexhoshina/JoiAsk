@@ -77,6 +77,8 @@ export interface Settings {
   bilibili_profile_url: string;
   ai_base_url: string;
   ai_model: string;
+  ai_supports_vision: boolean;
+  ai_auto_publish: boolean;
   ai_api_key_configured: boolean;
   spam_prompt: string;
   require_verified_user_to_post: boolean;
