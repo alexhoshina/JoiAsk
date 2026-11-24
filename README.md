@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://ask.powerlive.io/">使用文档</a> ·
+  <a href="docs/content/guide/quick-start.mdx">Workers 安装指南</a> ·
   <a href="https://ask.vjoi.cn/">在线示例</a>
 </p>
 
@@ -25,31 +25,51 @@
   <img src="docs/public/screenshot.png" alt="JoiAsk 提问箱界面预览" width="960" />
 </p>
 
-## 快速开始
+## Cloudflare 部署
 
-推荐使用 Docker 部署，镜像为 `ghcr.io/powerlive-io/joiask:latest`。按 **[快速开始指南](docs/content/guide/quick-start.mdx)** 完成以下步骤：
+这个分支从空数据库部署 JoiAsk。一个 Worker 提供提问箱、管理后台和文档，D1 保存业务数据，R2 保存图片，Durable Objects 负责实时互动，Queues 负责异步审核。
 
-1. 准备 `config.json`，生成并填写独立的 `security.session_secret`。
-2. 挂载配置、数据库和上传目录，启动容器。
-3. 停止后端后，通过离线 CLI 创建超级管理员，再恢复服务。
-4. 访问提问箱 `/` 和管理后台 `/admin`。
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fpowerlive-io%2FJoiAsk%2Ftree%2Fcodex%2Fcloudflare-workers)
 
-> **新安装没有默认管理员或默认密码。** Session 密钥为必填项；已有部署应保留有效密钥。
+按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的 Cloudflare 账户，启用 R2，分别为 `SESSION_SECRET` 和 `SETTINGS_KEY` 提供独立随机密钥，每个至少 32 字节。模板会申请 D1、R2、Queue 和 Durable Object。部署完成后，通过下面的 CLI 创建首个超级管理员。
 
-完整部署命令和安全注意事项见快速开始指南。
+### 命令行部署
 
-## 文档导航
+使用 Node.js 24，在仓库根目录安装依赖。首次部署先生成本地私密文件并确认 Wrangler 登录的是目标 Cloudflare 账户。保管好密钥，后续部署沿用相同值。
 
-| 需要做什么 | 文档 |
-| --- | --- |
-| 首次部署 | [快速开始](docs/content/guide/quick-start.mdx) |
-| 配置数据库、图片存储和安全选项 | [配置参考](docs/content/guide/configuration.mdx) |
-| 管理账号、重置管理员密码 | [管理员与密码恢复](docs/content/guide/administrators.mdx) |
-| 使用 Compose、配置 HTTPS 或更新镜像 | [部署与更新](docs/content/guide/deployment.mdx) |
-| 使用格式标签、邮箱绑定和密码找回 | [投稿与邮箱](docs/content/guide/usage.mdx) |
-| 自定义前台外观 | [自定义 CSS](docs/content/guide/custom-css.mdx) |
-| 了解上传文件的安全配置 | [上传文件安全](docs/content/guide/upload-serving-security.mdx) |
-| 排查运行问题 | [故障排查](docs/content/guide/troubleshooting.mdx) |
+```sh
+npm ci
+npx wrangler login
+node -e "const {randomBytes}=require('node:crypto'); const key=()=>randomBytes(32).toString('hex'); require('node:fs').writeFileSync('.dev.vars.production', 'SESSION_SECRET='+key()+'\nSETTINGS_KEY='+key()+'\n', {flag:'wx',mode:0o600})"
+npm run deploy -- --secrets-file .dev.vars.production
+```
+
+管理员密码从标准输入读取。安装仓库和远程 Worker 要使用相同的 D1 绑定配置。在 PowerShell 7 中执行：
+
+```powershell
+Read-Host -MaskInput '管理员密码' | node scripts/admin.mjs --remote create operator
+```
+
+在 Bash 中执行：
+
+```sh
+read -rs -p "管理员密码: " pass
+printf '%s\n' "$pass" | node scripts/admin.mjs --remote create operator
+unset pass
+```
+
+打开站点的 `/`、`/admin/` 和 `/docs/`。在后台按需启用通用 SMTP、配置兼容 Chat Completions 的模型服务。会员通过 B 站公开个性签名验证 UID，验证成功即可恢复原签名。
+
+同一个 Cloudflare 账号安装多个站点时，为每个实例选择独立的 Worker 名称。例如在部署命令中加入 `--name my-ask`，管理命令也使用 `--remote --name my-ask`。通过按钮定制了资源名称的站点，请在按钮创建的仓库副本中执行运维命令，以便读取该站点的绑定。
+
+### 本地开发
+
+```sh
+npm ci
+npm run dev
+```
+
+本地运行使用独立资源。将管理员命令中的 `--remote` 换成 `--local` 即可初始化开发账号。测试、构建和运维命令见[开发指南](CONTRIBUTING.md)和[管理员指南](docs/content/guide/administrators.mdx)。
 
 ## 参与开发
 

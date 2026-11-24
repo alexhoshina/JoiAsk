@@ -4,22 +4,35 @@
   "type": "module",
   "description": "JoiAsk Question Box",
   "scripts": {
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:admin": "cd admin && npm run dev -- -p 3001",
-    "dev:backend": "go run cmd/cmd.go",
-    "build:frontend": "cd frontend && npm run build",
-    "build:admin": "cd admin && npm run build",
-    "build": "npm run build:frontend && npm run build:admin",
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "admin": "node scripts/admin.mjs",
+    "build:docs": "npm --prefix docs run build",
+    "typecheck:worker": "tsc -p worker/tsconfig.json",
+    "test:worker": "node --test tests/worker/*.test.*",
     "test:content-markup": "node --test shared/content-markup.test.mts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:typecheck": "tsc --project tests/e2e/tsconfig.json"
+    "test:e2e:typecheck": "tsc --project tests/e2e/tsconfig.json",
+    "postinstall": "node scripts/install-apps.mjs",
+    "test": "npm run test:content-markup && npm run test:worker"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261124.1",
     "@playwright/test": "^1.65.0",
     "@types/node": "^22.20.5",
-    "concurrently": "^8.2.2",
-    "typescript": "^5.9.3"
+    "@types/nodemailer": "^8.0.2",
+    "esbuild": "^0.28.2",
+    "miniflare": "^5.20261123.0-beta",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.167.0"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@remix-run/multipart-parser": "^1.1.2",
+    "nodemailer": "^10.6.1"
   }
 }

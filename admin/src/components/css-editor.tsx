@@ -6,7 +6,11 @@ import type { OnMount } from "@monaco-editor/react";
 import type { editor, languages, Position } from "monaco-editor";
 import { Button } from "@/components/ui/button";
 
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+const MonacoEditor = dynamic(async () => {
+  const { default: Editor, loader } = await import("@monaco-editor/react");
+  loader.config({ paths: { vs: "/admin/monaco/vs" } });
+  return Editor;
+}, {
   ssr: false,
   loading: () => (
     <div className="flex h-[560px] items-center justify-center bg-[#1e1e1e] text-sm text-white/60">

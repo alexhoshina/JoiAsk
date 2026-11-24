@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,8 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { BilibiliVerificationSettings } from "@/components/bilibili-verification-settings";
-import { EmailSettings, getSettings, updateSettings } from "@/lib/api";
+import { type EmailSettings, type Settings, getSettings, updateSettings } from "@/lib/api";
 
 export default function SettingsPage() {
   const [email, setEmail] = useState<EmailSettings>({
@@ -34,7 +33,12 @@ export default function SettingsPage() {
     key: K,
     value: EmailSettings[K],
   ) => setEmail((current) => ({ ...current, [key]: value }));
-  const [deepSeekAPIKey, setDeepSeekAPIKey] = useState("");
+  const [baseURL, setBaseURL] = useState("");
+  const [model, setModel] = useState("");
+  const [apiKey, setAPIKey] = useState("");
+  const [hasKey, setHasKey] = useState(false);
+  const [clearKey, setClearKey] = useState(false);
+  const [clearMailPassword, setClearMailPassword] = useState(false);
   const [spamPrompt, setSpamPrompt] = useState("");
   const [requireVerifiedUserToPost, setRequireVerifiedUserToPost] =
     useState(false);
@@ -44,17 +48,24 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const showSettings = useCallback((settings: Settings) => {
+    setEmail(settings.email);
+    setAPIKey("");
+    setHasKey(settings.ai_api_key_configured);
+    setClearKey(false);
+    setClearMailPassword(false);
+    setBaseURL(settings.ai_base_url);
+    setModel(settings.ai_model);
+    setSpamPrompt(settings.spam_prompt);
+    setRequireVerifiedUserToPost(settings.require_verified_user_to_post);
+  }, []);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const res = await getSettings();
         if (res.code === 200) {
-          if (res.data.email) setEmail(res.data.email);
-          setDeepSeekAPIKey(res.data.deepseek_api_key || "");
-          setSpamPrompt(res.data.spam_prompt || "");
-          setRequireVerifiedUserToPost(
-            !!res.data.require_verified_user_to_post,
-          );
+          showSettings(res.data);
         } else {
           setMessage(res.message || "加载失败");
         }
@@ -66,7 +77,7 @@ export default function SettingsPage() {
     };
 
     loadSettings();
-  }, []);
+  }, [showSettings]);
 
   const handleSave = async () => {
     if (!spamPrompt.trim()) {
@@ -79,16 +90,15 @@ export default function SettingsPage() {
     setIsSuccess(false);
     try {
       const res = await updateSettings({
-        email,
-        deepseek_api_key: deepSeekAPIKey.trim(),
+        email: { ...email, password: clearMailPassword ? null : email.password },
+        ai_base_url: baseURL.trim(),
+        ai_model: model.trim(),
+        ai_api_key: clearKey ? null : apiKey.trim(),
         spam_prompt: spamPrompt.trim(),
         require_verified_user_to_post: requireVerifiedUserToPost,
       });
       if (res.code === 200) {
-        if (res.data.email) setEmail(res.data.email);
-        setDeepSeekAPIKey(res.data.deepseek_api_key || "");
-        setSpamPrompt(res.data.spam_prompt || "");
-        setRequireVerifiedUserToPost(!!res.data.require_verified_user_to_post);
+        showSettings(res.data);
         setMessage("保存成功");
         setIsSuccess(true);
       } else {
@@ -108,7 +118,7 @@ export default function SettingsPage() {
           设置
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          管理投稿权限、B 站注册验证与外部服务配置
+          管理投稿权限、邮件服务和内容审核
         </p>
       </header>
 
@@ -138,8 +148,6 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
-
-      <BilibiliVerificationSettings />
 
       <Card>
         <CardHeader>
@@ -197,7 +205,7 @@ export default function SettingsPage() {
               >
                 <option value="starttls">STARTTLS（通常为 587）</option>
                 <option value="tls">TLS / SSL（通常为 465）</option>
-                <option value="none">不加密（仅用于本地邮件中继）</option>
+
               </select>
             </div>
             <div className="space-y-2">
@@ -217,17 +225,23 @@ export default function SettingsPage() {
                 id="smtp-password"
                 type="password"
                 value={email.password}
-                onChange={(e) => updateEmail("password", e.target.value)}
+                onChange={(e) => { setClearMailPassword(false); updateEmail("password", e.target.value); }}
                 autoComplete="new-password"
                 placeholder={
-                  email.password_configured
+                  email.password_configured && !clearMailPassword
                     ? "已配置，留空保留现有密码"
                     : "请输入 SMTP 密码或授权码"
                 }
                 disabled={isLoading || isSaving}
               />
               <p className="text-xs text-muted-foreground">
-                密码保存在数据库中，接口不会返回已保存的密码。留空表示保留原值。
+                {email.password_configured && <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" checked={clearMailPassword} onChange={(event) => {
+                    setClearMailPassword(event.target.checked);
+                    updateEmail("password", "");
+                  }} />
+                  清除已保存的 SMTP 密码
+                </label>}
               </p>
             </div>
             <div className="space-y-2">
@@ -272,21 +286,29 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>DeepSeek</CardTitle>
+          <CardTitle>内容审核服务</CardTitle>
           <CardDescription>
-            配置调用 DeepSeek 服务时使用的 API Key
+            配置支持 Chat Completions 的服务地址、模型与 API 密钥。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="deepseek-api-key">DeepSeek API Key</Label>
+            <Label htmlFor="ai-base-url">API 基础地址</Label>
+            <Input id="ai-base-url" type="url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="https://api.example.com/v1" disabled={isLoading || isSaving} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">模型名称</Label>
+            <Input id="ai-model" value={model} onChange={(event) => setModel(event.target.value)} disabled={isLoading || isSaving} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-api-key">API 密钥</Label>
             <div className="relative max-w-2xl">
               <Input
-                id="deepseek-api-key"
+                id="ai-api-key"
                 type={showAPIKey ? "text" : "password"}
-                value={deepSeekAPIKey}
-                onChange={(event) => setDeepSeekAPIKey(event.target.value)}
-                placeholder="请输入 DeepSeek API Key"
+                value={apiKey}
+                onChange={(event) => { setAPIKey(event.target.value); setClearKey(false); }}
+                placeholder={hasKey && !clearKey ? "已配置，留空保留" : "输入 API 密钥"}
                 autoComplete="off"
                 disabled={isLoading}
                 className="pr-10"
@@ -306,7 +328,10 @@ export default function SettingsPage() {
               </button>
             </div>
             <p className="text-sm text-muted-foreground">
-              密钥将保存在数据库中，仅登录后的管理员可以读取或修改。
+              {hasKey && <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={clearKey} onChange={(event) => { setClearKey(event.target.checked); setAPIKey(""); }} />
+                清除已保存的密钥
+              </label>}
             </p>
           </div>
 

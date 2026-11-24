@@ -12,9 +12,9 @@ import {
 } from 'fumadocs-ui/components/dialog/search'
 import { useStaticSearch } from 'fumadocs-core/search/client'
 
-// Loads the index exported to /api/search at build time; no search server is needed.
+// Loads the index exported to /docs/api/search at build time; no search server is needed.
 export default function StaticSearchDialog(props: SharedProps) {
-  const search = useStaticSearch()
+  const search = useStaticSearch({ from: '/docs/api/search' })
 
   return (
     <SearchDialog {...search} {...props}>

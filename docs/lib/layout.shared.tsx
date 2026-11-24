@@ -6,7 +6,7 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <>
-          <img src="/favicon.png" alt="" width={24} height={24} className="rounded" />
+          <img src="/docs/favicon.png" alt="" width={24} height={24} className="rounded" />
           <span>{siteName}</span>
         </>
       )

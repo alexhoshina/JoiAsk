@@ -66,7 +66,7 @@ export interface EmailSettings {
   username: string;
   password: string;
   password_configured: boolean;
-  security: 'starttls' | 'tls' | 'none';
+  security: 'starttls' | 'tls';
   from_email: string;
   from_name: string;
   site_url: string;
@@ -74,7 +74,9 @@ export interface EmailSettings {
 
 export interface Settings {
   email: EmailSettings;
-  deepseek_api_key: string;
+  ai_base_url: string;
+  ai_model: string;
+  ai_api_key_configured: boolean;
   spam_prompt: string;
   require_verified_user_to_post: boolean;
 }
@@ -95,17 +97,6 @@ export interface MembersResponse {
   total: number;
   page: number;
   page_size: number;
-}
-
-export interface BilibiliVerificationAccount {
-  id: number;
-  bilibili_uid: string;
-  cookie_configured: boolean;
-  last_checked_at: string | null;
-  last_successful_at: string | null;
-  last_error: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface Statistics {
@@ -235,7 +226,10 @@ export async function getSettings(): Promise<ApiResponse<Settings>> {
   return res.json();
 }
 
-export async function updateSettings(settings: Settings): Promise<ApiResponse<Settings>> {
+export async function updateSettings(settings: Omit<Settings, 'ai_api_key_configured' | 'email'> & {
+  ai_api_key: string | null;
+  email: Omit<EmailSettings, 'password'> & { password: string | null };
+}): Promise<ApiResponse<Settings>> {
   const res = await fetch(`${API_BASE}/settings`, {
     method: 'PUT',
     credentials: 'include',
@@ -403,30 +397,5 @@ export async function deleteMember(bilibiliUid: string): Promise<ApiResponse<nul
     method: 'DELETE',
     credentials: 'include',
   });
-  return res.json();
-}
-
-export async function getBilibiliVerificationAccount(): Promise<ApiResponse<BilibiliVerificationAccount | null>> {
-  const res = await fetch(`${API_BASE}/bilibili-verification-account`, { credentials: 'include' });
-  return res.json();
-}
-
-export async function saveBilibiliVerificationAccount(data: { bilibili_uid: string; cookie: string }): Promise<ApiResponse<BilibiliVerificationAccount>> {
-  const res = await fetch(`${API_BASE}/bilibili-verification-account`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
-}
-
-export async function testBilibiliVerificationAccount(): Promise<ApiResponse<{ valid: boolean; checked_at: string }>> {
-  const res = await fetch(`${API_BASE}/bilibili-verification-account/test`, { method: 'POST', credentials: 'include' });
-  return res.json();
-}
-
-export async function deleteBilibiliVerificationAccount(): Promise<ApiResponse<null>> {
-  const res = await fetch(`${API_BASE}/bilibili-verification-account`, { method: 'DELETE', credentials: 'include' });
   return res.json();
 }

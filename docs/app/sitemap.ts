@@ -5,8 +5,9 @@ import { source } from '@/lib/source'
 export const dynamic = 'force-static'
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  if (!siteURL) return []
   return source.getPages().map(page => ({
-    url: `${siteURL}${page.url}`,
+    url: `${siteURL}/docs${page.url}`,
     lastModified: page.data.lastModified
   }))
 }

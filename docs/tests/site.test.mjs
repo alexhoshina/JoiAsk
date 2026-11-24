@@ -36,13 +36,14 @@ test('build includes every documentation page and the docs home page', () => {
 test('generated internal links, fragments and resources resolve', async () => {
   let checked = 0
   for (const [file, source] of html) {
-    const pageURL = new URL(path.relative(dist, file), 'https://ask.powerlive.io/')
+    const pageURL = new URL(path.relative(dist, file).split(path.sep).join('/'), 'https://joiask.test/docs/')
     // Inspect emitted markup, not source MDX: this also covers home page links and navigation.
     for (const match of source.matchAll(/\s(?:href|src)="([^"]+)"/g)) {
       const value = match[1].replaceAll('&amp;', '&')
       const url = new URL(value, pageURL)
       if (url.origin !== pageURL.origin) continue
-      const pathname = decodeURIComponent(url.pathname)
+      assert.ok(url.pathname === '/docs' || url.pathname.startsWith('/docs/'), `${path.relative(dist, file)}: link escapes /docs/: ${value}`)
+      const pathname = decodeURIComponent(url.pathname.slice(5) || '/')
       let target = path.join(dist, pathname)
       if (pathname.endsWith('/')) target = path.join(target, 'index.html')
       else if (!path.extname(pathname)) target += '.html'
@@ -58,12 +59,13 @@ test('generated internal links, fragments and resources resolve', async () => {
   assert.ok(checked > 100, 'Expected to validate links across the full site')
 })
 
-test('custom domain, crawler configuration and sitemap agree', async () => {
-  assert.equal((await readFile(path.join(dist, 'CNAME'), 'utf8')).trim(), 'ask.powerlive.io')
-  assert.match(await readFile(path.join(dist, 'robots.txt'), 'utf8'), /Sitemap: https:\/\/ask\.powerlive\.io\/sitemap\.xml/)
+test('sitemap uses the configured public origin and the documentation path', async () => {
   const sitemap = await readFile(path.join(dist, 'sitemap.xml'), 'utf8')
-  assert.match(sitemap, /https:\/\/ask\.powerlive\.io\/guide\/quick-start</)
-  assert.doesNotMatch(sitemap, /github\.io|localhost/)
+  if (process.env.SITE_ORIGIN) {
+    assert.ok(sitemap.includes(new URL('/docs/guide/quick-start', process.env.SITE_ORIGIN).href))
+  } else {
+    assert.doesNotMatch(sitemap, /<loc>/)
+  }
 })
 
 test('literal legacy markup is preserved rather than interpreted as an MDX expression', () => {

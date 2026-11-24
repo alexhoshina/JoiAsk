@@ -67,8 +67,8 @@ export interface AccountUser {
 
 export interface VerificationStatus {
   status: 'pending' | 'verified' | 'expired' | 'consumed';
-  target_uid?: string;
-  bilibili_uid?: string;
+  challenge_code?: string;
+  bilibili_uid: string;
   bilibili_name?: string;
   bilibili_avatar?: string;
   requested_at: string;
@@ -145,6 +145,11 @@ export async function startAccountVerification(bilibiliUid: string): Promise<Api
 
 export async function getAccountVerification(): Promise<ApiResponse<VerificationStatus>> {
   const res = await fetch(`${API_BASE}/account/verification`, { credentials: 'include' });
+  return res.json();
+}
+
+export async function checkAccountVerification(): Promise<ApiResponse<VerificationStatus>> {
+  const res = await fetch(`${API_BASE}/account/verification/check`, { method: 'POST', credentials: 'include' });
   return res.json();
 }
 

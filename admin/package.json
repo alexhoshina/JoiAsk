@@ -9,11 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
     "@hookform/resolvers": "^5.2.2",
+    "@monaco-editor/react": "^4.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
+    "monaco-editor": "^0.57.0",
     "next": "15.5.29",
     "radix-ui": "^1.4.3",
     "react": "^18.3.1",

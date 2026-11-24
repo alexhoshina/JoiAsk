@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   AccountUser,
   VerificationStatus,
+  checkAccountVerification,
   getAccountVerification,
   loginAccount,
   registerAccount,
@@ -73,19 +74,6 @@ export function AccountDialog({
       })
       .catch(() => undefined);
   }, [open, mode, verification]);
-
-  useEffect(() => {
-    if (!open || verification?.status !== "pending") return;
-    const poll = window.setInterval(async () => {
-      try {
-        const response = await getAccountVerification();
-        if (response.code === 200) setVerification(response.data);
-      } catch {
-        setError("暂时无法查询验证状态，系统会继续重试");
-      }
-    }, 5000);
-    return () => window.clearInterval(poll);
-  }, [open, verification?.status]);
 
   useEffect(() => {
     if (!verification) return;
@@ -181,6 +169,21 @@ export function AccountDialog({
     setPassword("");
     setConfirmPassword("");
     setError("");
+  };
+
+  const checkSignature = async () => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await checkAccountVerification();
+      if (response.code === 200) setVerification(response.data);
+      else setError(response.message || "暂时无法验证签名，请稍后重试");
+    } catch {
+      setError("验证请求失败，请检查网络连接后重试");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -342,24 +345,32 @@ export function AccountDialog({
         ) : verification.status === "pending" ? (
           <div className="space-y-4">
             <div className="rounded-md bg-secondary p-4 text-sm leading-6">
-              请在 3 分钟内关注 B 站账号{" "}
+              请复制下方验证码，打开你的 B 站空间，暂时将个性签名改为这个验证码并保存。
               <a
-                href={`https://space.bilibili.com/${verification.target_uid}`}
+                href={`https://space.bilibili.com/${verification.bilibili_uid}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-primary underline underline-offset-2"
               >
-                {verification.target_uid}
+                打开 UID {verification.bilibili_uid} 的空间
               </a>
-              。如果已经关注，请先取关再重新关注。系统预计会在两分钟内完成检查；验证完成后再取关不会影响你的账号状态。
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                等待系统确认（预计 2 分钟内）
-              </span>
-              <span>{remaining} 秒</span>
+              <code className="select-all font-mono">{verification.challenge_code}</code>
+              <Button variant="outline" onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(verification.challenge_code || "");
+                  setMessage("已复制验证码");
+                } catch {
+                  setMessage("请选择上方验证码并手动复制");
+                }
+              }}>复制验证码</Button>
             </div>
+            {message && <p role="status" className="text-sm">{message}</p>}
+            <p className="text-sm">验证码剩余 {remaining} 秒。验证通过后可以恢复原签名。</p>
+            {remaining > 0 && <Button className="w-full" onClick={checkSignature} disabled={busy}>
+              {busy ? "正在验证…" : "我已修改签名，立即验证"}
+            </Button>}
             {error && <p className="text-sm text-destructive">{error}</p>}
             {remaining === 0 && (
               <Button
@@ -371,7 +382,7 @@ export function AccountDialog({
               </Button>
             )}
           </div>
-        ) : verification.status === "verified" ? (
+        ) : verification.status === "verified" && remaining > 0 ? (
           <form className="space-y-4" onSubmit={handleRegister}>
             <div className="rounded-md bg-secondary p-3">
               <div className="flex items-center gap-1.5 font-medium">
@@ -428,7 +439,7 @@ export function AccountDialog({
               请在 {Math.ceil(remaining / 60)} 分钟内完成注册
             </p>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="w-full" type="submit" disabled={busy}>
+            <Button className="w-full" type="submit" disabled={busy || remaining === 0}>
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

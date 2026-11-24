@@ -4,8 +4,9 @@ const withMDX = createMDX()
 
 /** @type {import('next').NextConfig} */
 const config = {
-  // GitHub Pages only serves files; every route is pre-rendered into out/.
+  // Pre-render every route for the application Worker's static assets.
   output: 'export',
+  basePath: '/docs',
   // The image optimizer needs a server; MDX images are served as-is.
   images: { unoptimized: true },
   reactStrictMode: true,

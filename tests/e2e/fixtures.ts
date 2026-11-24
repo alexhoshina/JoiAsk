@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test as base, expect, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
-import { adminCredentials } from './environment.mjs';
+import { adminCredentials, baseURL as workerURL } from './environment.mjs';
 
 type Tag = { id: number; tag_name: string; description: string };
 type Question = {
@@ -37,12 +37,18 @@ export const test = base.extend<{
   adminApi: APIRequestContext;
   adminPage: Page;
   dataset: Dataset;
-}>({
-  // Keep administrator cookies out of the visitor's page/request fixtures.
-  adminApi: async ({ playwright, baseURL }, use) => {
-    const api = await playwright.request.newContext({ baseURL });
+}, { adminState: Awaited<ReturnType<APIRequestContext['storageState']>> }>({
+  adminState: [async ({ playwright }, use) => {
+    const api = await playwright.request.newContext({ baseURL: workerURL });
     try {
       await apiData(api.post('/api/login', { data: adminCredentials }));
+      await use(await api.storageState());
+    } finally { await api.dispose(); }
+  }, { scope: 'worker' }],
+  // Keep administrator cookies out of the visitor's page/request fixtures.
+  adminApi: async ({ playwright, baseURL, adminState }, use) => {
+    const api = await playwright.request.newContext({ baseURL, storageState: adminState });
+    try {
       await use(api);
     } finally {
       await api.dispose();

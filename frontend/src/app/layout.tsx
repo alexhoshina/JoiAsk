@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { AccountAuthProvider } from "@/lib/account-auth";
 import { getSiteConfig } from "@/lib/site-config";
 import { EmojiCatalogProvider } from "@/lib/emoji-catalog";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +31,7 @@ export default async function RootLayout({
   return (
     <html lang="zh-CN" style={{ scrollbarGutter: 'stable' }}>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased fabric-linen`}
+        className="antialiased fabric-linen"
       >
         <AccountAuthProvider emailEnabled={config.email_enabled}>
           <EmojiCatalogProvider>

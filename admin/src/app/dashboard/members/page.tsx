@@ -153,7 +153,7 @@ export default function MembersPage() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">注册用户</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            管理通过 B 站关注验证或后台手动创建的平台账号
+            管理通过 B 站签名验证或后台手动创建的平台账号
           </p>
         </div>
         <Button onClick={openAdd}>
@@ -285,7 +285,7 @@ export default function MembersPage() {
             <DialogHeader>
               <DialogTitle>手动添加注册用户</DialogTitle>
               <DialogDescription>
-                无需关注验证，直接创建可登录的平台账号。
+                无需签名验证，直接创建可登录的平台账号。
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-5">

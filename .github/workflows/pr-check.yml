@@ -1,109 +1,47 @@
-name: PR Check
-
+name: Workers checks
 on:
-  # Required checks must also report results for documentation-only changes.
   pull_request:
   push:
-    branches: [main]
+    branches: [codex/cloudflare-workers]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: pr-check-${{ github.ref }}
+  group: workers-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  backend:
-    name: Backend (Go)
+  verify:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Check formatting
-        run: |
-          unformatted=$(gofmt -l cmd internal pkg)
-          if [ -n "$unformatted" ]; then
-            echo "The following files need gofmt:"
-            echo "$unformatted"
-            exit 1
-          fi
-      - name: Vet
-        run: go vet ./...
-      - name: Test
-        run: go test ./...
-
-  web:
-    name: Web (${{ matrix.app }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [frontend, admin]
+    timeout-minutes: 25
+    env:
+      WRANGLER_SEND_METRICS: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: ${{ matrix.app }}/package-lock.json
-      - run: npm ci
-        working-directory: ${{ matrix.app }}
-      - name: Lint
-        run: npm run lint
-        working-directory: ${{ matrix.app }}
-      - name: Typecheck
-        run: npx tsc --noEmit
-        working-directory: ${{ matrix.app }}
-
-  shared:
-    name: Shared tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm run test:content-markup
-
-  e2e:
-    name: Playwright (Chromium)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
             admin/package-lock.json
-      - name: Install dependencies
-        run: |
-          npm ci
-          npm --prefix frontend ci
-          npm --prefix admin ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Typecheck browser tests
-        run: npm run test:e2e:typecheck
-      - name: Run browser tests
-        run: npm run test:e2e
-      - name: Upload Playwright report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+            docs/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck:worker
+      - run: npm run test:e2e:typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm --prefix docs test
+      - run: npx tsc --noEmit -p frontend && npx tsc --noEmit -p admin
+      - run: npm --prefix frontend run lint && npm --prefix admin run lint
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run deploy -- --dry-run
+      - uses: actions/upload-artifact@v4
+        if: failure()
         with:
-          name: playwright-report
+          name: browser-test-report
           path: |
             playwright-report/
             test-results/

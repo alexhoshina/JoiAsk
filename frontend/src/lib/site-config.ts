@@ -1,47 +1,17 @@
-import { cache } from 'react';
-import { DEFAULT_CUSTOM_CSS } from '@joiask/default-custom-css';
+import { cache } from "react";
+import { DEFAULT_CUSTOM_CSS } from "@joiask/default-custom-css";
+import { siteConfigContext, type PublicSiteConfig } from "../../../shared/site-config-context";
 
-export interface SiteConfig {
-  site_name: string;
-  site_description: string;
-  logo_url: string;
-  favicon_url: string;
-  custom_css: string;
-  email_enabled: boolean;
-}
-
-export const DEFAULT_SITE_CONFIG: SiteConfig = {
-  site_name: 'JoiAsk 提问箱',
-  site_description: 'JoiAsk 提问箱',
-  logo_url: '/favicon.png',
-  favicon_url: '/favicon.png',
-  custom_css: DEFAULT_CUSTOM_CSS,
-  email_enabled: false,
-};
-
-const CONFIG_URL = process.env.SITE_CONFIG_API_URL || 'http://127.0.0.1:8080/api/config';
-
-export const getSiteConfig = cache(async (): Promise<SiteConfig> => {
-  try {
-    const response = await fetch(CONFIG_URL, { cache: 'no-store' });
-    if (!response.ok) return DEFAULT_SITE_CONFIG;
-
-    const result = await response.json() as {
-      code: number;
-      data?: Partial<SiteConfig>;
-    };
-    if (result.code !== 200 || !result.data) return DEFAULT_SITE_CONFIG;
-
-    return {
-      site_name: result.data.site_name?.trim() || DEFAULT_SITE_CONFIG.site_name,
-      site_description: result.data.site_description?.trim() || DEFAULT_SITE_CONFIG.site_description,
-      logo_url: result.data.logo_url?.trim() || DEFAULT_SITE_CONFIG.logo_url,
-      favicon_url: result.data.favicon_url?.trim() || DEFAULT_SITE_CONFIG.favicon_url,
-      custom_css: result.data.custom_css?.trim() || DEFAULT_SITE_CONFIG.custom_css,
-      email_enabled: !!result.data.email_enabled,
-    };
-  } catch {
-    return DEFAULT_SITE_CONFIG;
-  }
+export const getSiteConfig = cache(async (): Promise<PublicSiteConfig> => {
+  const load = siteConfigContext.getStore();
+  if (!load) throw new Error("Site configuration requires a Worker request");
+  const site = await load();
+  return {
+    ...site,
+    site_name: site.site_name || "JoiAsk 提问箱",
+    site_description: site.site_description || "JoiAsk 提问箱",
+    logo_url: site.logo_url || "/favicon.png",
+    favicon_url: site.favicon_url || "/favicon.png",
+    custom_css: site.custom_css || DEFAULT_CUSTOM_CSS,
+  };
 });
-

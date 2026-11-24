@@ -1,124 +1,37 @@
-# 开发环境的配置
+# 开发 JoiAsk Workers 版
 
-## 基础
+使用 Node.js 24，在仓库根目录执行 `npm ci`。根包管理 CLI 和测试工具，安装脚本也会按照各自的锁文件安装前台、后台与文档依赖。
 
-- Golang
-- NodeJS / NPM
-- Caddy
+## 本地运行
 
-## 使用 Docker Compose（推荐）
+执行 `npm run dev` 来构建并启动完整站点。首次开发时脚本生成本地专用密钥并应用 D1 迁移。Worker 日志会显示本机地址，后台在 `/admin/`，文档在 `/docs/`。要创建本地超级管理员，在 PowerShell 7 中执行 `Read-Host -MaskInput '管理员密码' | node scripts/admin.mjs --local create operator`。开发数据默认保存在 `.wrangler/state`。
 
-项目提供了包含 Caddy、前端、管理后台和后端的开发环境。先从仓库根目录复制开发模板到已忽略的私有配置文件，再运行 `openssl rand -hex 32`，将输出填入 `config/config.json` 的 `security.session_secret`（模板中故意留空）：
+前台使用 vinext 服务端渲染，后台与文档在构建时导出。Worker 在同一入口处理 HTTP 请求、队列和定时维护，用 Durable Object 协调站点的在线连接。业务表结构通过 `migrations/` 下的有序 SQL 文件变更。更新绑定后执行 `npx wrangler types --include-runtime=false worker/bindings.d.ts` 并提交类型变化。
 
-```bash
-cp config/config_dev.json config/config.json
-openssl rand -hex 32
-# 编辑 config/config.json，将命令输出填入 security.session_secret
-```
+## 运行检查
 
-复制和生成步骤仅用于首次设置；已有 `config/config.json` 时直接检查并保留其中有效的密钥，不要覆盖现有配置。Compose 通过 `JOIASK_CONFIG=/app/config/config.json` 读取该私有文件（仓库挂载到 `/app`）；模板的 SQLite 路径 `/data/joiask.db` 位于持久化的 `backend-data` 卷中。
+SMTP 集成测试会使用 OpenSSL 临时签发本地测试证书。Linux 和 macOS 可使用命令行的 `openssl`，Windows 也支持 Git for Windows 附带的 OpenSSL。
 
-密钥至少 32 字节，不能使用历史默认值或示例占位值；开发环境也不会回退到默认密钥。不要将密钥提交到仓库，也不要每次启动重新生成。模板中的 `bilibili_cookie_key` 是仅供开发使用的独立测试值，不要用于生产或与 Session 密钥共用。然后启动：
-
-```bash
-docker compose -f docker-compose.dev.yml up --build
-```
-
-启动后访问：
-
-- 前端：`http://localhost/`
-- 管理后台：`http://localhost/admin/`
-- 后端 API：`http://localhost/api/`
-
-前端和管理后台使用 Next.js Fast Refresh，后端使用 Air 监听 Go 源文件并自动重新构建。源码目录以 bind mount 挂载，修改后无需重建镜像。默认监听宿主机的 80 端口；如果端口被占用，可运行：
-
-```bash
-DEV_PORT=8088 docker compose -f docker-compose.dev.yml up --build
-```
-
-此时通过 `http://localhost:8088/` 访问。依赖文件发生变化时，使用 `docker compose -f docker-compose.dev.yml up --build` 重新构建对应开发镜像。
-
-### 首次创建管理员
-
-开发环境也不再自动创建 `admin/admin`。首次使用前，需要通过服务端 CLI 显式创建超级管理员；已有账号按角色迁移规则保留。密码只通过标准输入传入，安全输入方法及恢复说明见 [管理员初始化与密码恢复](docs/content/guide/administrators.mdx)。
-
-执行命令前先停止所有连接同一数据库的后端实例。宿主机使用 `go run cmd/cmd.go admin create <username>`；Compose 开发环境先运行 `docker compose -f docker-compose.dev.yml stop backend`，再将密码通过管道传给 `docker compose -f docker-compose.dev.yml run --rm --no-deps -T backend go run cmd/cmd.go admin create <username>`。后者复用开发环境的配置与数据库卷。成功后运行 `docker compose -f docker-compose.dev.yml start backend`。不要混用生产镜像的 `/work/jask` 路径和开发容器的 `/app` 源码路径。
-
-## 开发与调试
-
-要注意本项目前后端分离存放在不同的仓库中，在 clone 时注意加上 `--recurse-submodules`。
-
-```
-git clone --recurse-submodules git@github.com:Xinrea/JoiAsk.git
-```
-
-### 1. 启动后端
-
-直接运行 Go 时，首次设置先在仓库根目录执行 `cp config/config_dev.json config/config.json`，运行 `openssl rand -hex 32`，并将输出写入 `config/config.json` 的 `security.session_secret`。已有私有配置时不要覆盖，也不要重新生成有效的密钥。模板的 `bilibili_cookie_key` 仅供开发使用，不能用于生产。开发模板里的 SQLite 路径 `/data/joiask.db` 适用于 Compose 容器，宿主机直跑时请在私有配置中改为可写的本地路径（例如 `./ask.db`）。默认配置路径相对于启动时的工作目录，为 `./config/config.json`；若从其他目录启动，可使用 `JOIASK_CONFIG=/path/to/config.json` 指定同一私有配置。请勿直接运行未填写密钥的模板；密钥验证失败时，后端在数据库初始化前退出。
-
-```bash
-go run cmd/cmd.go
-```
-
-### 2. 启动前端 dev
-
-```
-cd frontend && npm run dev
-```
-
-### 3. 启动管理后台 dev
-
-```
-cd admin && npm run dev -- --port 3001
-```
-
-### 4. 启动本地服务器
-
-> [!NOTE]
-> 由于未 Release 打包前，前后端完全独立，在本地需要进行一定的 Path Routing 设置才能够正常访问，因此推荐使用 Caddy 来启用一个本地服务器。
-
-开发配置 `Caddyfile.dev` 已提供在项目根目录，只需 `caddy run --config Caddyfile.dev` 即可启动本地服务器。
-
-之后浏览器访问本地 localhost 即能够正常预览页面。
-
-## Playwright 浏览器测试
-
-测试使用真实的前台、管理后台和 Go API，覆盖登录与注销、投稿校验与草稿、格式预览、搜索和话题过滤、审核公开与撤回、拦截箱操作以及话题增删改。
-
-需要 Node.js 22+、Go（版本见 `go.mod`），以及支持 SQLite CGO 构建的 C 编译器。在仓库根目录运行：
-
-```bash
-npm ci
-npm --prefix frontend ci
-npm --prefix admin ci
+```sh
+npm run typecheck:worker
+npm run test:e2e:typecheck
+npm test
+npm run build
+npm --prefix docs test
 npx playwright install chromium
 npm run test:e2e
+npm run deploy -- --dry-run
 ```
 
-Linux 首次运行可用 `npx playwright install --with-deps chromium` 一并安装浏览器系统依赖。测试会自动构建 Go 后端，通过离线 CLI 创建测试管理员，启动两个 Next.js 开发服务器和同源代理；不需要手动启动服务、配置 Caddy 或准备 `config/config.json`。
+浏览器测试启动独立的本地 Worker，从空库创建一次性管理员。测试使用临时资源，不读开发数据库。SMTP、签名读取和模型审核的自动化检查使用可控服务。站长在自己的 Cloudflare 环境完成真实主页读取和邮件送达验收。
 
-每次运行在系统临时目录中创建独立 SQLite 数据库、随机 Session 密钥和上传目录，正常退出或中断时清理，不读取或修改开发数据库。测试管理员凭据只用于该临时环境。各用例使用独立浏览器会话，测试数据在用例结束后清理；由于涉及全站设置，默认单 worker 执行，不要用 `--workers` 并行运行。
+发布与运维见[快速开始](docs/content/guide/quick-start.mdx)及[管理员指南](docs/content/guide/administrators.mdx)。
 
-默认占用 `127.0.0.1:14820`～`14823`，依次用于同源代理、Go API、前台和管理后台。端口冲突时可用 `E2E_PORT=15820 npm run test:e2e` 整体调整四个端口。测试不会复用已经运行的服务器；同一工作目录运行测试时，请先停止前台和后台的 `next dev`，避免争用 `.next` 构建目录。
+## 从 main 迁移到 Workers 的计划
 
-```bash
-npm run test:e2e:typecheck          # 检查测试代码类型
-npm run test:e2e -- --grep '匿名投稿' # 只运行指定流程
-npm run test:e2e:ui                 # Playwright 交互界面
-npm run test:e2e:report             # 查看上次 HTML 报告
-```
+本分支以 `main@1591dfb` 为起点。安装范围为空 D1 和空 R2，旧站数据保留在原部署。
 
-失败时会保留截图、视频和 trace，保存在已忽略的 `test-results/` 与 `playwright-report/` 中。PR Check 会执行 Chromium 测试并上传报告，CI 失败用例重试一次。本套测试不依赖 B 站、SMTP 或 AI 审核等外部服务，也不验证这些服务的真实集成；开启投稿验证要求时，仅验证匿名用户的登录引导。
-
-## 文档站
-
-文档源码位于 `docs/`（Fumadocs + Next.js 静态导出），使用独立的依赖和锁文件，不影响应用构建：
-
-```bash
-npm --prefix docs ci
-npm --prefix docs run dev
-npm --prefix docs run build
-npm --prefix docs run test
-```
-
-提交文档前运行构建和测试。文档站结构与写作约定见 [开发指南](docs/content/development.mdx#文档站)。
+1. 用 vinext 检查前台兼容性，将前台 SSR、后台和文档构建到同一 Worker。通过首页 HTML 验证站点标题、图标和自定义 CSS。
+2. 按版本应用 D1 迁移，将用户、权限、投稿及审核迁入 Worker。用 R2 保存附件，用 Durable Object 广播实时事件。通过 CLI 在新库中创建首个管理员。
+3. 将注册切换到公开个性签名验证，为邮件和模型审核接入通用 SMTP 与 Chat Completions。使用本地可控服务验证重试、并发和凭据处理。
+4. 用实际构建产物跑浏览器回归，检查部署预演，然后移除 Go、Caddy、Docker 及独立镜像发布链。公开分支后再验证部署按钮、真实 B 站签名可见时间和目标 SMTP 的出口连通性。

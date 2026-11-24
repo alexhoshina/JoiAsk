@@ -12,3 +12,13 @@ docs/*.tsbuildinfo
 /node_modules/
 /playwright-report/
 /test-results/
+/dist/
+/.wrangler/
+.dev.vars*
+!.dev.vars.example
+/.local/
+/.npm-cache/
+**/.wrangler/
+frontend/dist/
+frontend/.vinext/
+*.tsbuildinfo

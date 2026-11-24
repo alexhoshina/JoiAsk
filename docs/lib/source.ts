@@ -8,8 +8,6 @@ const docs = defineDocs({
   meta: { schema: metaSchema }
 })
 
-// The custom domain serves the documentation at the site root, keeping the
-// /guide/... URLs published by the previous site.
 export const source = loader({
   baseUrl: '/',
   source: docs.toFumadocsSource()
