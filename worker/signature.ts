@@ -81,7 +81,7 @@ export async function signature(req: Request, env: Env, path: string) {
     if (!gate.meta.changes) return fail(429, '请稍等十秒后再检查签名');
     let profile;
     try {
-      profile = await fetchProfile(challenge.bilibili_uid);
+      profile = await fetchProfile(challenge.bilibili_uid, { freshSince: challenge.requested_at });
     } catch (error) {
       return fail(502, profileFailureMessage(error));
     }

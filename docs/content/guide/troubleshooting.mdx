@@ -14,7 +14,7 @@ title: "故障排查"
 
 核对 UID，把界面提供的验证码完整复制到该 UID 的公开 B 站个性签名，保存后点击「我已修改签名，立即验证」。提示签名不一致时，检查签名首尾是否有空格，并给公开资料留出更新时间。
 
-提示 B 站限制访问时，Worker 还没有取得签名。保留当前浏览器窗口，等限制解除后再用有效验证码重试。站长可以在 Workers 日志中查看 `/api/account/verification/check` 的出站请求。验证使用 B 站公开名片接口 `api.bilibili.com/x/web-interface/card`；如果出站请求返回 HTTP 412，表示 B 站拒绝了这次资料读取。验证码过期后再领取新码。
+Worker 通过 UApiPro 查询该 UID 的公开资料。点击验证时会请求刷新资料，然后在站内比对完整签名。遇到访问限制或过期缓存时，保留当前浏览器窗口，有效期内可用原验证码重试。站长可以在 Workers 日志中检查 `/api/account/verification/check` 对 `uapis.cn/api/v1/social/bilibili/userinfo` 的出站请求。访客调用受到 UApiPro 限流和额度约束，HTTP 429 时应稍后再试。验证码过期后再领取新码。
 
 ## 图片或邮件异常
 

@@ -14,6 +14,8 @@ import { localCertificates } from './smtp-certificates.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const domain = 'https://ask.example';
 const password = 'local-test-credential';
+const profileAPI = 'https://uapis.cn/api/v1/social/bilibili/userinfo';
+const avatarURL = 'https://i0.hdslb.com/test.png';
 let runtime, env, certificates, smtp, implicitTLS, startTLS, capturedMail;
 let currentSignature = '';
 let profileResponse;
@@ -74,21 +76,36 @@ function mailboxServer(mode, tlsOptions) {
   return mode === 'tls' ? createTLSServer(tlsOptions,serve) : createServer(serve);
 }
 
-function cardResponse(mid) {
-  return Response.json({
-    code: 0,
-    data: { card: { mid, name: '测试用户', face: 'https://i0.hdslb.com/test.png', sign: currentSignature } }
-  });
+function userInfoResponse(mid, options) {
+  return Response.json({ mid, name: '测试用户', face: 'http://i0.hdslb.com/test.png', sign: currentSignature }, options);
 }
 
 async function upstream(request) {
   const url = new URL(request.url);
-  outboundRequests.push({ url: request.url, method: request.method, cookie: request.headers.get('cookie') });
-  if (url.origin === 'https://api.bilibili.com' && url.pathname === '/x/web-interface/card' && url.searchParams.has('mid')) {
-    return (profileResponse ?? cardResponse)(url.searchParams.get('mid'));
+  outboundRequests.push({ url: request.url, method: request.method, headers: Object.fromEntries(request.headers), hasBody: request.body !== null });
+  if (url.origin + url.pathname === profileAPI && url.searchParams.has('uid')) {
+    return (profileResponse ?? userInfoResponse)(url.searchParams.get('uid'));
   }
-  if (url.hostname === 'i0.hdslb.com') return new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10));
+  if (url.href === avatarURL) return new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10));
   return new Response('Unrecognized test upstream', { status: 404 });
+}
+
+function assertProfileRequest(request, uid, challenge, startedAt) {
+  const url = new URL(request.url);
+  assert.equal(url.origin + url.pathname, profileAPI);
+  assert.equal(request.method, 'GET');
+  assert.equal(request.hasBody, false);
+  assert.equal(request.headers.cookie, undefined);
+  assert.equal(request.headers.authorization, undefined);
+  assert.equal(url.searchParams.get('uid'), uid);
+  if (challenge) {
+    assert.deepEqual([...url.searchParams.keys()].sort(), ['_t', 'uid']);
+    const timestamp = Number(url.searchParams.get('_t'));
+    assert.ok(Number.isSafeInteger(timestamp) && timestamp >= startedAt && timestamp <= Date.now(), 'freshness timestamp in milliseconds');
+    assert.ok(!Object.values(request.headers).some(value => value.includes(challenge)), 'challenge must stay local');
+  } else {
+    assert.deepEqual([...url.searchParams.keys()], ['uid']);
+  }
 }
 
 before(async () => {
@@ -184,15 +201,20 @@ async function seedMember(uid, username) {
 test('signature belongs to its browser and UID, expires, and is consumed by exactly one registration', async (t) => {
   t.after(() => { profileResponse = undefined; currentSignature = ''; });
   const call = browser(), stranger = browser(), uid = '9007199254740995';
+  const initialRequests = outboundRequests.length;
   const start = await call('account/verification', { bilibili_uid: uid });
   assert.equal(start.code, 200);
   assert.equal((await call('account/verification')).data.challenge_code, start.data.challenge_code);
   assert.equal((await stranger('account/verification/check', {})).code, 404);
+  assert.equal(outboundRequests.length, initialRequests);
+  const startedAt = Date.now();
   assert.equal((await call('account/verification/check', {})).code, 409);
   assert.equal((await call('account/verification/check', {})).code, 429);
+  assert.equal(outboundRequests.length, initialRequests + 1);
+  assertProfileRequest(outboundRequests.at(-1), uid, start.data.challenge_code, startedAt);
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   currentSignature = start.data.challenge_code;
-  profileResponse = () => cardResponse('123');
+  profileResponse = () => userInfoResponse('123');
   assert.equal((await call('account/verification/check', {})).code, 502);
   assert.equal((await call('account/verification')).data.challenge_code, start.data.challenge_code);
   profileResponse = undefined;
@@ -203,12 +225,19 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   }
   currentSignature = start.data.challenge_code;
   // Also accept an exact integer literal even when its UID exceeds Number.MAX_SAFE_INTEGER.
-  profileResponse = uid => cardResponse(JSON.rawJSON(uid));
+  profileResponse = uid => userInfoResponse(JSON.rawJSON(uid));
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   assert.equal((await call('account/verification/check', {})).data.status, 'verified');
+  const firstDownload = outboundRequests.length;
   const register = () => call('account/register', { username: 'alice', password });
   const results = await Promise.all([register(), register()]);
   assert.equal(results.filter(r => r.code === 200).length, 1);
+  const avatarRequests = outboundRequests.slice(firstDownload);
+  assert.ok(avatarRequests.length > 0);
+  for (const request of avatarRequests) {
+    assert.equal(request.url, avatarURL, 'download the HTTP profile avatar only over HTTPS');
+    assert.equal(request.headers.cookie, undefined);
+  }
   const member = (await call('account/info')).data;
   assert.equal(member.bilibili_uid, uid);
   assert.ok(await env.FILES.get(member.bilibili_avatar.replace('/upload-img/', '')));
@@ -221,37 +250,39 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   assert.equal((await stranger('account/verification/check', {})).code, 410);
 });
 
-test('unavailable or invalid Bilibili cards preserve a challenge for another manual check', async (t) => {
+test('UApiPro failures, invalid profiles and stale responses preserve a challenge for another manual check', async (t) => {
   t.after(() => { profileResponse = undefined; currentSignature = ''; });
   const call = browser();
   const uid = '9007199254740993';
   const start = await call('account/verification', { bilibili_uid: uid });
   assert.equal(start.code, 200);
   currentSignature = start.data.challenge_code;
-  const expectedRequest = { url: 'https://api.bilibili.com/x/web-interface/card?mid=' + uid, method: 'GET', cookie: null };
-  for (const [label, response, restricted] of [
-    ['HTTP 412', () => new Response('upstream denied', { status: 412 }), true],
-    ['API -412', () => Response.json({ code: -412, data: null }), true],
-    ['API -352', () => Response.json({ code: -352, data: null }), true],
-    ['malformed UID', () => cardResponse('invalid'), false],
-    ['different UID', () => cardResponse('9007199254740992'), false],
-    ['no card', () => Response.json({ code: 0, data: {} }), false],
+  for (const [label, response] of [
+    ['HTTP 429', () => Response.json({ message: 'rate limited' }, { status: 429 })],
+    ['HTTP 503', () => new Response('service unavailable', { status: 503 })],
+    ['error payload', () => Response.json({ code: 'UPSTREAM_ERROR', message: 'upstream unavailable' })],
+    ['malformed JSON', () => new Response('<html>unexpected response</html>')],
+    ['malformed UID', () => userInfoResponse('invalid')],
+    ['different UID', () => userInfoResponse(JSON.rawJSON('9007199254740992'))],
+    ['missing signature', () => Response.json({ mid: uid, name: '测试用户', face: avatarURL })],
+    ['stale provider cache', () => userInfoResponse(uid, { headers: { 'X-Cache-Status': 'STALE' } })],
+    ['stale CDN cache', () => userInfoResponse(uid, { headers: { 'EO-Cache-Status': 'STALE' } })],
+    ['response predates the challenge', () => userInfoResponse(uid, { headers: { Age: '86400' } })],
   ]) {
     profileResponse = response;
     await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
     const firstRequest = outboundRequests.length;
+    const startedAt = Date.now();
     const result = await call('account/verification/check', {});
     assert.equal(result.code, 502, label);
-    if (restricted) {
-      assert.match(result.message, /B\s*站/, label);
-      assert.match(result.message, /限制|风控|拦截/, label);
-    }
+    if (label === 'HTTP 429') assert.match(result.message, /限|频繁/, label);
     const recovered = await call('account/verification');
     assert.equal(recovered.data.status, 'pending', label);
     assert.equal(recovered.data.challenge_code, start.data.challenge_code, label);
-    assert.deepEqual(outboundRequests.slice(firstRequest), [expectedRequest], label);
+    assert.equal(outboundRequests.length, firstRequest + 1, label);
+    assertProfileRequest(outboundRequests[firstRequest], uid, start.data.challenge_code, startedAt);
   }
-  profileResponse = undefined;
+  profileResponse = uid => userInfoResponse(uid, { headers: { Age: '0' } });
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   const verified = await call('account/verification/check', {});
   assert.equal(verified.data.status, 'verified');
@@ -280,6 +311,20 @@ test('administrator authorization checks roles and revokes obsolete sessions ind
   assert.equal((await regular('account/login', { username: 'dual-login', password })).code, 200);
   assert.equal((await regular('logout')).code, 200);
   assert.equal((await regular('account/info')).code, 200);
+});
+
+test('administrator creates a member using the UID without requesting a signature refresh', async () => {
+  const hash = await hashPassword(password);
+  await env.DB.prepare("INSERT INTO admins(username,password_hash,role) VALUES ('profile-admin',?,'admin')").bind(hash).run();
+  const call = browser();
+  assert.equal((await call('login', { username: 'profile-admin', password })).code, 200);
+  const firstRequest = outboundRequests.length;
+  const result = await call('member', { bilibili_uid: '783', username: 'manual-member', password });
+  assert.equal(result.code, 200);
+  const requests = outboundRequests.slice(firstRequest);
+  assert.equal(requests.length, 2);
+  assertProfileRequest(requests[0], '783');
+  assert.equal(requests[1].url, avatarURL);
 });
 
 function tokenFromMail() {
