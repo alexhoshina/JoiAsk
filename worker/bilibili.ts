@@ -3,14 +3,41 @@ import { canonicalUID } from './identity-shared';
 
 export type Profile = { uid: string; name: string; face: string; signature: string };
 
-type FailureStage = 'http' | 'stale' | 'format' | 'identity';
-const restrictedHTTP = new Set([402, 403, 412, 429]);
+type FailureStage = 'http' | 'business' | 'stale' | 'format' | 'identity' | 'configuration';
+const restrictedHTTP = new Set([403, 412, 429]);
+const restrictedBusiness = new Set([-352, -403, -412, -509, -799]);
+
+function publicHost(hostname: string) {
+  const host = hostname.replace(/\.$/, '');
+  if (host.startsWith('[')) {
+    // URL canonicalizes IPv6. Allow ordinary global unicast addresses.
+    return /^\[[23][0-9a-f]{3}:/.test(host) && !/^\[(?:2001:(?:0?:|db8:)|2002:)/.test(host);
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const [a, b, c] = host.split('.').map(Number);
+    return a > 0 && a < 224 && a !== 10 && a !== 127 &&
+      !(a === 169 && b === 254) && !(a === 172 && b >= 16 && b <= 31) &&
+      !(a === 100 && b >= 64 && b <= 127) && !(a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) &&
+      !(a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) && !(a === 203 && b === 0 && c === 113);
+  }
+  return host.includes('.') && !/(?:^|\.)(?:localhost|localdomain|local|internal|intranet|lan|home\.arpa)$/.test(host);
+}
+
+export function validateProfileURL(value: string): string {
+  const input = value.trim();
+  const url = URL.canParse(input) ? new URL(input) : undefined;
+  if (!url || !/^https:\/\/[^/?#@]+(?:[/?#]|$)/i.test(input) || url.protocol !== 'https:' || url.username || url.password ||
+      /[#\\\s]/.test(input) || input.length > 2048 || !publicHost(url.hostname)) {
+    throw new Error('请输入有效的公网 HTTPS 资料接口地址');
+  }
+  return url.href;
+}
 
 class ProfileReadError extends Error {
   readonly stage: FailureStage;
   readonly code?: number;
   constructor(stage: FailureStage, code?: number) {
-    super('UApiPro profile unavailable');
+    super('Bilibili public card unavailable');
     this.stage = stage;
     this.code = code;
   }
@@ -21,18 +48,19 @@ export function profileFailureMessage(error: unknown) {
   const code = error instanceof ProfileReadError ? error.code : undefined;
   // JSON parsing and network errors may include an upstream response or URL.
   // Log only our stage and an optional numeric status.
-  console.warn('UApiPro profile unavailable', code === undefined ? { stage } : { stage, code });
-  if (stage === 'http' && code !== undefined && restrictedHTTP.has(code)) {
-    return 'B 站资料服务 UApiPro 限制了本次请求，请稍后再试';
+  console.warn('Bilibili public card unavailable', code === undefined ? { stage } : { stage, code });
+  if (code !== undefined && ((stage === 'http' && restrictedHTTP.has(code)) ||
+      (stage === 'business' && restrictedBusiness.has(code)))) {
+    return 'B 站资料接口限制了本次请求，请稍后再试';
   }
   if (stage === 'stale') return 'B 站资料服务暂时只返回了过期缓存，请稍后再试';
   return '暂时无法读取 B 站公开资料，请稍后重试';
 }
 
 export function parseProfile(json: string, uid: string): Profile {
-  let card;
+  let result;
   try {
-    card = JSON.parse(json, (key, value, context?: { source?: string }) => {
+    result = JSON.parse(json, (key, value, context?: { source?: string }) => {
       // Preserve the original integer literal when a UID exceeds Number.MAX_SAFE_INTEGER.
       if (key === 'mid' && typeof value === 'number') {
         return context?.source ?? (Number.isSafeInteger(value) ? String(value) : null);
@@ -42,20 +70,26 @@ export function parseProfile(json: string, uid: string): Profile {
   } catch {
     throw new ProfileReadError('format');
   }
-  if (!card || card.error || typeof card.name !== 'string' || !card.name || typeof card.face !== 'string' ||
+  if (!Number.isSafeInteger(result?.code)) throw new ProfileReadError('format');
+  if (result.code !== 0) throw new ProfileReadError('business', result.code);
+  const card = result.data?.card;
+  if (!card || typeof card.name !== 'string' || !card.name || typeof card.face !== 'string' ||
       !card.face || typeof card.sign !== 'string') throw new ProfileReadError('format');
   if (card.mid !== uid) throw new ProfileReadError('identity');
   return { uid, name: card.name, face: card.face, signature: card.sign };
 }
 
-export async function fetchProfile(uid: string, { freshSince }: { freshSince?: number } = {}): Promise<Profile> {
+export async function fetchConfiguredProfile(env: Env, uid: string, freshSince?: number): Promise<Profile> {
+  const endpoint = await env.DB.prepare('SELECT bilibili_profile_url FROM config WHERE id=1').first<string>('bilibili_profile_url');
+  if (!endpoint) throw new ProfileReadError('configuration');
+  return fetchProfile(uid, { endpoint, freshSince });
+}
+
+export async function fetchProfile(uid: string, { endpoint, freshSince }: { endpoint: string; freshSince?: number }): Promise<Profile> {
   if (canonicalUID(uid) !== uid) throw new Error('B 站 UID 无效');
-  const endpoint = new URL('https://uapis.cn/api/v1/social/bilibili/userinfo');
-  endpoint.searchParams.set('uid', uid);
-  // UApiPro caches user profiles for 15 minutes. Its documented REST refresh
-  // parameter is needed when a user has just changed their signature.
-  if (freshSince !== undefined) endpoint.searchParams.set('_t', String(Date.now()));
-  const response = await fetch(endpoint, {
+  const url = new URL(validateProfileURL(endpoint));
+  url.searchParams.set('mid', uid);
+  const response = await fetch(url, {
     redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(15000),
     headers: {
       Accept: 'application/json',
@@ -68,10 +102,7 @@ export async function fetchProfile(uid: string, { freshSince }: { freshSince?: n
   if (freshSince !== undefined) {
     const cachedSeconds = Number(response.headers.get('Age'));
     const predatesChallenge = cachedSeconds > 0 && Date.now() - cachedSeconds * 1000 < freshSince;
-    const markedStale = ['X-Cache-Status', 'EO-Cache-Status'].some(
-      header => response.headers.get(header)?.trim().toUpperCase() === 'STALE'
-    );
-    if (predatesChallenge || markedStale) {
+    if (predatesChallenge) {
       await response.body?.cancel().catch(() => {});
       throw new ProfileReadError('stale');
     }

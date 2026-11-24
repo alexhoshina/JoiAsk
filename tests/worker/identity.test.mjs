@@ -14,7 +14,8 @@ import { localCertificates } from './smtp-certificates.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const domain = 'https://ask.example';
 const password = 'local-test-credential';
-const profileAPI = 'https://uapis.cn/api/v1/social/bilibili/userinfo';
+const profileAPI = 'https://api.bilibili.com/x/web-interface/card';
+const customProfileAPI = 'https://profiles.example/native/card/?lang=zh&mid=111&mid=222';
 const avatarURL = 'https://i0.hdslb.com/test.png';
 let runtime, env, certificates, smtp, implicitTLS, startTLS, capturedMail;
 let currentSignature = '';
@@ -77,14 +78,15 @@ function mailboxServer(mode, tlsOptions) {
 }
 
 function userInfoResponse(mid, options) {
-  return Response.json({ mid, name: '测试用户', face: 'http://i0.hdslb.com/test.png', sign: currentSignature }, options);
+  return Response.json({ code: 0, data: { card: { mid, name: '测试用户', face: 'http://i0.hdslb.com/test.png', sign: currentSignature } } }, options);
 }
 
 async function upstream(request) {
   const url = new URL(request.url);
   outboundRequests.push({ url: request.url, method: request.method, headers: Object.fromEntries(request.headers), hasBody: request.body !== null });
-  if (url.origin + url.pathname === profileAPI && url.searchParams.has('uid')) {
-    return (profileResponse ?? userInfoResponse)(url.searchParams.get('uid'));
+  const path = url.origin + url.pathname;
+  if ((path === profileAPI || path === customProfileAPI.split('?')[0]) && url.searchParams.has('mid')) {
+    return (profileResponse ?? userInfoResponse)(url.searchParams.get('mid'));
   }
   if (url.href === avatarURL) {
     if (avatarResponse) await avatarResponse();
@@ -93,22 +95,21 @@ async function upstream(request) {
   return new Response('Unrecognized test upstream', { status: 404 });
 }
 
-function assertProfileRequest(request, uid, challenge, startedAt) {
-  const url = new URL(request.url);
-  assert.equal(url.origin + url.pathname, profileAPI);
+function assertProfileRequest(request, uid, challenge, endpoint = profileAPI) {
+  const expected = new URL(endpoint);
+  expected.searchParams.set('mid', uid);
+  assert.equal(request.url, expected.href);
   assert.equal(request.method, 'GET');
   assert.equal(request.hasBody, false);
   assert.equal(request.headers.cookie, undefined);
   assert.equal(request.headers.authorization, undefined);
-  assert.equal(url.searchParams.get('uid'), uid);
   if (challenge) {
-    assert.deepEqual([...url.searchParams.keys()].sort(), ['_t', 'uid']);
-    const timestamp = Number(url.searchParams.get('_t'));
-    assert.ok(Number.isSafeInteger(timestamp) && timestamp >= startedAt && timestamp <= Date.now(), 'freshness timestamp in milliseconds');
     assert.ok(!Object.values(request.headers).some(value => value.includes(challenge)), 'challenge must stay local');
-  } else {
-    assert.deepEqual([...url.searchParams.keys()], ['uid']);
   }
+}
+
+function setProfileEndpoint(endpoint) {
+  return env.DB.prepare('UPDATE config SET bilibili_profile_url=? WHERE id=1').bind(endpoint).run();
 }
 
 before(async () => {
@@ -159,7 +160,7 @@ before(async () => {
     bindings: { SESSION_SECRET: 'a'.repeat(48), SETTINGS_KEY: 'b'.repeat(48) }, outboundService: upstream
   }));
   env = { DB: await runtime.getD1Database('DB'), FILES: await runtime.getR2Bucket('FILES') };
-  for (const migration of ['0001_config.sql', '0002_identity.sql', '0004_avatar_uploads.sql']) {
+  for (const migration of ['0001_config.sql', '0002_identity.sql', '0004_avatar_uploads.sql', '0005_bilibili_profile_url.sql']) {
     const sql = await readFile(join(root, 'migrations', migration), 'utf8');
     await env.DB.batch(sql.split(';').map(part => part.trim()).filter(Boolean).map(part => env.DB.prepare(part)));
   }
@@ -210,11 +211,10 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   assert.equal((await call('account/verification')).data.challenge_code, start.data.challenge_code);
   assert.equal((await stranger('account/verification/check', {})).code, 404);
   assert.equal(outboundRequests.length, initialRequests);
-  const startedAt = Date.now();
   assert.equal((await call('account/verification/check', {})).code, 409);
   assert.equal((await call('account/verification/check', {})).code, 429);
   assert.equal(outboundRequests.length, initialRequests + 1);
-  assertProfileRequest(outboundRequests.at(-1), uid, start.data.challenge_code, startedAt);
+  assertProfileRequest(outboundRequests.at(-1), uid, start.data.challenge_code);
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   currentSignature = start.data.challenge_code;
   profileResponse = () => userInfoResponse('123');
@@ -253,37 +253,42 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   assert.equal((await stranger('account/verification/check', {})).code, 410);
 });
 
-test('UApiPro failures, invalid profiles and stale responses preserve a challenge for another manual check', async (t) => {
+test('the configured native card endpoint preserves a challenge on blocked, invalid or stale responses', async (t) => {
   t.after(() => { profileResponse = undefined; currentSignature = ''; });
   const call = browser();
   const uid = '9007199254740993';
   const start = await call('account/verification', { bilibili_uid: uid });
   assert.equal(start.code, 200);
+  await setProfileEndpoint(customProfileAPI);
+  t.after(() => setProfileEndpoint(profileAPI));
   currentSignature = start.data.challenge_code;
   for (const [label, response] of [
+    ['HTTP 412', () => new Response('blocked', { status: 412 })],
     ['HTTP 429', () => Response.json({ message: 'rate limited' }, { status: 429 })],
     ['HTTP 503', () => new Response('service unavailable', { status: 503 })],
-    ['error payload', () => Response.json({ code: 'UPSTREAM_ERROR', message: 'upstream unavailable' })],
+    ['redirect', () => new Response(null, { status: 302, headers: { Location: profileAPI } })],
+    ['blocked code -412', () => Response.json({ code: -412, message: 'rejected' })],
+    ['blocked code -352', () => Response.json({ code: -352, message: 'rejected' })],
+    ['unexpected business code', () => Response.json({ code: -404 })],
+    ['invalid business code', () => Response.json({ code: '0' })],
+    ['flat profile', () => Response.json({ mid: uid, name: '测试用户', face: avatarURL, sign: currentSignature })],
     ['malformed JSON', () => new Response('<html>unexpected response</html>')],
     ['malformed UID', () => userInfoResponse('invalid')],
     ['different UID', () => userInfoResponse(JSON.rawJSON('9007199254740992'))],
-    ['missing signature', () => Response.json({ mid: uid, name: '测试用户', face: avatarURL })],
-    ['stale provider cache', () => userInfoResponse(uid, { headers: { 'X-Cache-Status': 'STALE' } })],
-    ['stale CDN cache', () => userInfoResponse(uid, { headers: { 'EO-Cache-Status': 'STALE' } })],
+    ['missing signature', () => Response.json({ code: 0, data: { card: { mid: uid, name: '测试用户', face: avatarURL } } })],
     ['response predates the challenge', () => userInfoResponse(uid, { headers: { Age: '86400' } })],
   ]) {
     profileResponse = response;
     await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
     const firstRequest = outboundRequests.length;
-    const startedAt = Date.now();
     const result = await call('account/verification/check', {});
     assert.equal(result.code, 502, label);
-    if (label === 'HTTP 429') assert.match(result.message, /限|频繁/, label);
+    if (/412|429|blocked/.test(label)) assert.match(result.message, /限制/, label);
     const recovered = await call('account/verification');
     assert.equal(recovered.data.status, 'pending', label);
     assert.equal(recovered.data.challenge_code, start.data.challenge_code, label);
     assert.equal(outboundRequests.length, firstRequest + 1, label);
-    assertProfileRequest(outboundRequests[firstRequest], uid, start.data.challenge_code, startedAt);
+    assertProfileRequest(outboundRequests[firstRequest], uid, start.data.challenge_code, customProfileAPI);
   }
   profileResponse = uid => userInfoResponse(uid, { headers: { Age: '0' } });
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
@@ -353,7 +358,7 @@ test('a slow signature check cannot verify a replacement challenge', async (t) =
   profileResponse = async uid => {
     waiting.resolve();
     await release.promise;
-    return Response.json({ mid: uid, name: '测试用户', face: avatarURL, sign: original.data.challenge_code });
+    return Response.json({ code: 0, data: { card: { mid: uid, name: '测试用户', face: avatarURL, sign: original.data.challenge_code } } });
   };
   t.after(() => { release.resolve(); profileResponse = undefined; });
   const checking = owner('account/verification/check', {});
@@ -413,7 +418,9 @@ test('administrator authorization checks roles and revokes obsolete sessions ind
   assert.equal((await regular('account/info')).code, 200);
 });
 
-test('administrator creates a member using the UID without requesting a signature refresh', async () => {
+test('administrator creates a member from the configured native card endpoint', async (t) => {
+  await setProfileEndpoint(customProfileAPI);
+  t.after(() => setProfileEndpoint(profileAPI));
   const hash = await hashPassword(password);
   await env.DB.prepare("INSERT INTO admins(username,password_hash,role) VALUES ('profile-admin',?,'admin')").bind(hash).run();
   const call = browser();
@@ -423,7 +430,7 @@ test('administrator creates a member using the UID without requesting a signatur
   assert.equal(result.code, 200);
   const requests = outboundRequests.slice(firstRequest);
   assert.equal(requests.length, 2);
-  assertProfileRequest(requests[0], '783');
+  assertProfileRequest(requests[0], '783', undefined, customProfileAPI);
   assert.equal(requests[1].url, avatarURL);
 });
 

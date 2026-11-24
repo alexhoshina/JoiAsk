@@ -1,6 +1,6 @@
 import { ok, fail } from './common';
 import { hashPassword, verifyPassword } from './password.mjs';
-import { fetchProfile, profileFailureMessage } from './bilibili';
+import { fetchConfiguredProfile, profileFailureMessage } from './bilibili';
 import { AvatarUnavailable, createMemberWithAvatar } from './avatars';
 import { signature } from './signature';
 import { emailRoute } from './email';
@@ -86,7 +86,7 @@ async function members(req: Request, env: Env, path: string, actor: AdminRow) {
     if (await env.DB.prepare('SELECT 1 FROM users WHERE bilibili_uid=? OR username=?').bind(uid, username).first()) return fail(409, '该 UID 或登录名已注册');
     let profile;
     try {
-      profile = await fetchProfile(uid);
+      profile = await fetchConfiguredProfile(env, uid);
     } catch (error) {
       return fail(502, profileFailureMessage(error));
     }

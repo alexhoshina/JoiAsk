@@ -1,6 +1,6 @@
 import { ok, fail } from './common';
 import { hashPassword, randomHex } from './password.mjs';
-import { fetchProfile, profileFailureMessage } from './bilibili';
+import { fetchConfiguredProfile, profileFailureMessage } from './bilibili';
 import { createMemberWithAvatar } from './avatars';
 import {
   canonicalUID, conflict, cookieDigest, credential, digestKey, jsonObject, loginSession, publicMember, rateLimit,
@@ -120,7 +120,7 @@ export async function signature(req: Request, env: Env, path: string) {
     if (!gate.meta.changes) return fail(429, '请稍等十秒后再检查签名');
     let profile;
     try {
-      profile = await fetchProfile(challenge.bilibili_uid, { freshSince: challenge.requested_at });
+      profile = await fetchConfiguredProfile(env, challenge.bilibili_uid, challenge.requested_at);
     } catch (error) {
       return fail(502, profileFailureMessage(error));
     }

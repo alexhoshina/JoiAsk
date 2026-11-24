@@ -74,11 +74,18 @@ export interface EmailSettings {
 
 export interface Settings {
   email: EmailSettings;
+  bilibili_profile_url: string;
   ai_base_url: string;
   ai_model: string;
   ai_api_key_configured: boolean;
   spam_prompt: string;
   require_verified_user_to_post: boolean;
+}
+
+export interface BilibiliProfilePreview {
+  uid: string;
+  name: string;
+  signature: string;
 }
 
 export interface Member {
@@ -226,7 +233,8 @@ export async function getSettings(): Promise<ApiResponse<Settings>> {
   return res.json();
 }
 
-export async function updateSettings(settings: Omit<Settings, 'ai_api_key_configured' | 'email'> & {
+export async function updateSettings(settings: Omit<Settings, 'ai_api_key_configured' | 'email' | 'bilibili_profile_url'> & {
+  bilibili_profile_url?: string;
   ai_api_key: string | null;
   email: Omit<EmailSettings, 'password'> & { password: string | null };
 }): Promise<ApiResponse<Settings>> {
@@ -235,6 +243,16 @@ export async function updateSettings(settings: Omit<Settings, 'ai_api_key_config
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+  });
+  return res.json();
+}
+
+export async function testBilibiliProfile(profileURL: string, uid: string): Promise<ApiResponse<BilibiliProfilePreview>> {
+  const res = await fetch(`${API_BASE}/settings/bilibili/test`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bilibili_profile_url: profileURL, bilibili_uid: uid }),
   });
   return res.json();
 }

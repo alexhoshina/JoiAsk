@@ -14,9 +14,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { type EmailSettings, type Settings, getSettings, updateSettings } from "@/lib/api";
+import { type BilibiliProfilePreview, type EmailSettings, type Settings, getSettings, testBilibiliProfile, updateSettings } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+
+type ProfileTest =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; profile: BilibiliProfilePreview };
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+  const [profileURL, setProfileURL] = useState("");
+  const [savedProfileURL, setSavedProfileURL] = useState("");
+  const [testUid, setTestUid] = useState("");
+  const [profileTest, setProfileTest] = useState<ProfileTest>({ status: "idle" });
   const [email, setEmail] = useState<EmailSettings>({
     enabled: false,
     host: "",
@@ -50,6 +62,8 @@ export default function SettingsPage() {
 
   const showSettings = useCallback((settings: Settings) => {
     setEmail(settings.email);
+    setProfileURL(settings.bilibili_profile_url);
+    setSavedProfileURL(settings.bilibili_profile_url);
     setAPIKey("");
     setHasKey(settings.ai_api_key_configured);
     setClearKey(false);
@@ -79,6 +93,18 @@ export default function SettingsPage() {
     loadSettings();
   }, [showSettings]);
 
+  const handleProfileTest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setProfileTest({ status: "loading" });
+    try {
+      const response = await testBilibiliProfile(profileURL.trim(), testUid.trim());
+      if (response.code === 200) setProfileTest({ status: "success", profile: response.data });
+      else setProfileTest({ status: "error", message: response.message || "资料接口测试失败" });
+    } catch {
+      setProfileTest({ status: "error", message: "无法测试资料接口，请检查网络连接" });
+    }
+  };
+
   const handleSave = async () => {
     if (!spamPrompt.trim()) {
       setMessage("低质量提问判定标准不能为空");
@@ -91,6 +117,7 @@ export default function SettingsPage() {
     try {
       const res = await updateSettings({
         email: { ...email, password: clearMailPassword ? null : email.password },
+        ...(isSuperAdmin && profileURL.trim() !== savedProfileURL && { bilibili_profile_url: profileURL.trim() }),
         ai_base_url: baseURL.trim(),
         ai_model: model.trim(),
         ai_api_key: clearKey ? null : apiKey.trim(),
@@ -148,6 +175,48 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>B 站用户资料</CardTitle>
+            <CardDescription>注册验证和后台创建用户时，会从此接口读取 B 站资料。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="max-w-2xl space-y-4" onSubmit={handleProfileTest}>
+              <div className="space-y-2">
+                <Label htmlFor="bilibili-profile-url">B 站用户资料接口地址</Label>
+                <Input id="bilibili-profile-url" aria-describedby="bilibili-profile-url-help" type="url" required value={profileURL}
+                  placeholder="https://bili.example.com/card" disabled={isLoading || isSaving || profileTest.status === "loading"}
+                  onChange={(event) => { setProfileURL(event.target.value); setProfileTest({ status: "idle" }); }} />
+                <p id="bilibili-profile-url-help" className="break-words text-sm text-muted-foreground">
+                  默认地址为 <code>https://api.bilibili.com/x/web-interface/card</code>。使用自建接口时填写完整的 HTTPS 地址，Worker 会自动附加 <code>mid</code> 查询参数。
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bilibili-test-uid">测试用 B 站 UID</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input id="bilibili-test-uid" className="max-w-xs" inputMode="numeric" pattern="[0-9]{1,19}" maxLength={19}
+                    required value={testUid} disabled={isLoading || isSaving || profileTest.status === "loading"}
+                    onChange={(event) => { setTestUid(event.target.value); setProfileTest({ status: "idle" }); }} />
+                  <Button type="submit" variant="outline"
+                    disabled={isLoading || isSaving || profileTest.status === "loading" || !profileURL.trim() || !testUid.trim()}>
+                    {profileTest.status === "loading" ? "正在读取…" : "测试连接"}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">测试使用当前输入的地址。点击页面底部的“保存设置”后，新地址才会生效。</p>
+              </div>
+              {profileTest.status === "error" && <p role="alert" className="text-sm text-destructive">{profileTest.message}</p>}
+              {profileTest.status === "success" && (
+                <div role="status" className="rounded-md bg-muted p-3 text-sm">
+                  <p className="break-words font-medium">{profileTest.profile.name}（UID {profileTest.profile.uid}）</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words">{profileTest.profile.signature || "暂无个性签名"}</p>
+                </div>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -355,7 +424,7 @@ export default function SettingsPage() {
       </Card>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={handleSave} disabled={isLoading || isSaving}>
+        <Button onClick={handleSave} disabled={isLoading || isSaving || profileTest.status === "loading"}>
           {isLoading ? "加载中..." : isSaving ? "保存中..." : "保存设置"}
         </Button>
         {message && (

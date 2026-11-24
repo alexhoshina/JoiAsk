@@ -1,4 +1,5 @@
-import { currentAdmin } from './identity';
+import { fetchProfile, profileFailureMessage, validateProfileURL } from './bilibili';
+import { canonicalUID, currentAdmin } from './identity-shared';
 import { encryptSecret, fail, ok } from './common';
 import { MAX_IMAGE_SIZE, limitedForm, putImage, rasterExtension } from './uploads';
 
@@ -16,6 +17,7 @@ interface Site {
 
 export interface Settings extends Site {
   settings_version: number;
+  bilibili_profile_url: string;
   ai_base_url: string;
   ai_model: string;
   ai_api_key: string;
@@ -41,6 +43,7 @@ function exposeSettings(row: Settings) {
   return {
     ai_base_url: row.ai_base_url, ai_model: row.ai_model, ai_api_key: '',
     ai_api_key_configured: !!row.ai_api_key, spam_prompt: row.spam_prompt,
+    bilibili_profile_url: row.bilibili_profile_url,
     require_verified_user_to_post: !!row.require_verified_user_to_post,
     email: {
       enabled: !!row.email_enabled, host: row.smtp_host, port: row.smtp_port, security: row.smtp_security,
@@ -70,6 +73,11 @@ function webAddress(value: string, httpsOnly = false) {
       url.username || url.password || url.search || url.hash) throw new Invalid('请输入有效的网站地址');
   return url.href.replace(/\/+$/, '');
 }
+function profileURL(value: unknown) {
+  const endpoint = str(value).trim();
+  try { return validateProfileURL(endpoint); }
+  catch { throw new Invalid('请输入有效的公网 HTTPS 资料接口地址'); }
+}
 function assetAddress(value: unknown) {
   const url = str(value).trim();
   if (!url) return '/favicon.png';
@@ -98,7 +106,7 @@ async function updateSite(env: Env, body: Fields) {
   return ok(await publicSiteConfig(env));
 }
 
-async function updateSettings(env: Env, row: Settings, body: Fields) {
+async function updateSettings(env: Env, row: Settings, body: Fields, profileEndpoint: string) {
   const mail = body.email === undefined ? exposeSettings(row).email : fields(body.email);
   const enabled = flag(mail.enabled);
   const host = str(mail.host, 255).trim().toLowerCase();
@@ -131,9 +139,10 @@ async function updateSettings(env: Env, row: Settings, body: Fields) {
   const gated = flag(body.require_verified_user_to_post ?? !!row.require_verified_user_to_post);
   const saved = await env.DB.prepare(`UPDATE config SET email_enabled=?, smtp_host=?, smtp_port=?, smtp_security=?, smtp_username=?,
     smtp_password=?, smtp_from_email=?, smtp_from_name=?, email_site_url=?, ai_base_url=?, ai_model=?,
-    ai_api_key=?, spam_prompt=?, require_verified_user_to_post=?, settings_version=settings_version+1
+    ai_api_key=?, spam_prompt=?, require_verified_user_to_post=?, bilibili_profile_url=?, settings_version=settings_version+1
     WHERE id=1 AND settings_version=?`)
-    .bind(enabled, host, port || 587, security, username, password, from, name, siteURL, endpoint, model, key, prompt, gated, row.settings_version).run();
+    .bind(enabled, host, port || 587, security, username, password, from, name, siteURL, endpoint, model, key, prompt, gated,
+      profileEndpoint, row.settings_version).run();
   if (!saved.meta.changes) throw new Invalid('设置已同时更新，请刷新后再试');
 }
 
@@ -153,18 +162,36 @@ async function uploadAsset(req: Request, env: Env) {
 
 export async function settings(req: Request, env: Env): Promise<Response | null> {
   const path = new URL(req.url).pathname;
-  if (!['/api/config', '/api/config/asset', '/api/settings'].includes(path)) return null;
+  if (!['/api/config', '/api/config/asset', '/api/settings', '/api/settings/bilibili/test'].includes(path)) return null;
   if (req.method === 'GET' && path === '/api/config') return ok(await publicSiteConfig(env));
-  if (!await currentAdmin(req, env)) return fail(408, '请先登录');
+  const admin = await currentAdmin(req, env);
+  if (!admin) return fail(408, '请先登录');
   try {
     if (path === '/api/config/asset' && req.method === 'POST') return await uploadAsset(req, env);
     if (path === '/api/config' && req.method === 'PUT') return await updateSite(env, fields(await req.json()));
+    if (path === '/api/settings/bilibili/test' && req.method === 'POST') {
+      if (admin.role !== 'super_admin') return fail(403, '仅超级管理员可以测试 B 站资料接口');
+      const input = fields(await req.json());
+      const uid = canonicalUID(input.bilibili_uid);
+      if (!uid) return fail(400, 'B 站 UID 无效');
+      const endpoint = profileURL(input.bilibili_profile_url);
+      try {
+        const profile = await fetchProfile(uid, { endpoint });
+        return ok({ uid: profile.uid, name: profile.name, signature: profile.signature });
+      } catch (error) { return fail(502, profileFailureMessage(error)); }
+    }
     if (path === '/api/settings' && ['GET', 'PUT'].includes(req.method)) {
       const load = () => env.DB.prepare('SELECT * FROM config WHERE id=1').first<Settings>();
       const row = await load();
       if (!row) throw new Error('Missing config');
       if (req.method === 'GET') return ok(exposeSettings(row));
-      await updateSettings(env, row, fields(await req.json()));
+      const input = fields(await req.json());
+      let profileEndpoint = row.bilibili_profile_url;
+      if ('bilibili_profile_url' in input && input.bilibili_profile_url !== profileEndpoint) {
+        if (admin.role !== 'super_admin') return fail(403, '仅超级管理员可以更改 B 站资料接口');
+        profileEndpoint = profileURL(input.bilibili_profile_url);
+      }
+      await updateSettings(env, row, input, profileEndpoint);
       return ok(exposeSettings((await load())!));
     }
     return fail(405, '请求方法无效');

@@ -60,6 +60,8 @@ unset pass
 
 打开站点的 `/`、`/admin/` 和 `/docs/`。在后台按需启用通用 SMTP、配置兼容 Chat Completions 的模型服务。会员通过 B 站公开个性签名验证 UID，验证成功即可恢复原签名。
 
+默认从 B 站原生名片接口读取资料。使用自建反代时，超级管理员在后台「设置」填入完整接口地址（例如 `https://bili.example.com/card`），Worker 会自动附上 `mid` 查询参数。[配置说明](./docs/content/guide/configuration.mdx)
+
 同一个 Cloudflare 账号安装多个站点时，为每个实例选择独立的 Worker 名称。例如在部署命令中加入 `--name my-ask`，管理命令也使用 `--remote --name my-ask`。通过按钮定制了资源名称的站点，请在按钮创建的仓库副本中执行运维命令，以便读取该站点的绑定。
 
 ### 本地开发
