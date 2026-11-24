@@ -10,7 +10,7 @@ type NewMember = {
   passwordHash: string;
 };
 
-type RegistrationAuthority = { challenge: string } | { admin: AdminRow };
+type RegistrationAuthority = { challenge: string; code: string } | { admin: AdminRow };
 export class AvatarUnavailable extends Error {}
 
 async function removeDiscarded(env: Env, keys: string[]) {
@@ -59,9 +59,9 @@ export async function createMemberWithAvatar(env: Env, member: NewMember, author
       ? env.DB.prepare(`INSERT INTO users(bilibili_uid,username,password_hash,bilibili_name,bilibili_avatar,verified_at)
           SELECT c.bilibili_uid,?,?,c.bilibili_name,?,?
           FROM signature_challenges c JOIN avatar_uploads a ON a.object_key=? AND a.state='staged'
-          WHERE c.digest=? AND c.bilibili_uid=? AND c.status='verified'
+          WHERE c.digest=? AND c.challenge_code=? AND c.bilibili_uid=? AND c.status='verified'
             AND c.confirmation_until>? RETURNING *`)
-        .bind(member.username, member.passwordHash, url, member.verifiedAt, key, authority.challenge, member.uid, Date.now())
+        .bind(member.username, member.passwordHash, url, member.verifiedAt, key, authority.challenge, authority.code, member.uid, Date.now())
       : env.DB.prepare(`INSERT INTO users(bilibili_uid,username,password_hash,bilibili_name,bilibili_avatar,verified_at)
           SELECT ?,?,?,?,?,? FROM avatar_uploads WHERE object_key=? AND state='staged'
             AND EXISTS (SELECT 1 FROM admins WHERE id=? AND session_version=?) RETURNING *`)

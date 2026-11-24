@@ -22,6 +22,74 @@ test('注册挑战在刷新后可恢复，只有原会话能读取验证码', as
   await expect(code).toHaveText(challenge);
 });
 
+test('彩虹屁页注册可更换 UID、恢复新验证码并取消验证', async ({ page, request }) => {
+  const prefix = String(Date.now());
+  const [originalUid, newUid, occupiedUid] = ['1', '2', '3'].map(suffix => prefix + suffix);
+  const endpoint = '/api/account/verification';
+  const dialog = page.getByRole('dialog');
+  const code = dialog.locator('code');
+  const openRegister = async () => {
+    await page.getByRole('button', { name: '登录 / 注册', exact: true }).click();
+    await dialog.getByRole('button', { name: '注册', exact: true }).click();
+  };
+  const expectSpace = async (uid: string) => {
+    await expect(dialog.getByRole('link', { name: '打开 UID ' + uid + ' 的空间', exact: true }))
+      .toHaveAttribute('href', 'https://space.bilibili.com/' + uid);
+  };
+
+  // Reserve a third UID in another cookie jar to exercise a real replacement conflict.
+  await apiData(request.post(endpoint, { data: { bilibili_uid: occupiedUid } }));
+  await page.goto('/rainbow/');
+  await openRegister();
+  const initialInput = dialog.getByLabel('你的 B 站 UID', { exact: true });
+  const change = dialog.getByRole('button', { name: '更换 UID', exact: true });
+  const replacement = dialog.getByLabel('新的 B 站 UID', { exact: true });
+  await initialInput.fill(originalUid);
+  await dialog.getByRole('button', { name: '开始验证' }).click();
+  await expectSpace(originalUid);
+  await expect(code).toHaveText(/\S+/);
+  const originalCode = await code.innerText();
+
+  await change.click();
+  await expect(replacement).toHaveValue(originalUid);
+  await replacement.fill(occupiedUid);
+  await dialog.getByRole('button', { name: '验证新 UID' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('正在验证');
+  await expect(replacement).toHaveValue(occupiedUid);
+  await dialog.getByRole('button', { name: '返回原验证' }).click();
+  await expectSpace(originalUid);
+  await expect(code).toHaveText(originalCode);
+
+  await change.click();
+  await replacement.fill(newUid);
+  await dialog.getByRole('button', { name: '验证新 UID' }).click();
+  await expectSpace(newUid);
+  await expect(code).toHaveText(/\S+/);
+  const newCode = await code.innerText();
+  expect(newCode).not.toBe(originalCode);
+  // The original UID must be available immediately, while the browser still holds the new one.
+  await apiData(request.delete(endpoint));
+  const reclaimed = await apiData<{ challenge_code: string }>(request.post(endpoint, { data: { bilibili_uid: originalUid } }));
+  expect(reclaimed.challenge_code).not.toBe(originalCode);
+
+  await page.reload();
+  await openRegister();
+  await expectSpace(newUid);
+  await expect(code).toHaveText(newCode);
+  await dialog.getByRole('button', { name: '取消验证' }).click();
+  await expect(initialInput).toHaveValue('');
+  await page.reload();
+  await openRegister();
+  await expect(initialInput).toHaveValue('');
+  await expect(code).toHaveCount(0);
+  expect((await (await page.request.get(endpoint)).json()).code).toBe(404);
+  await initialInput.fill(newUid);
+  await dialog.getByRole('button', { name: '开始验证' }).click();
+  await expectSpace(newUid);
+  await expect(code).toHaveText(/\S+/);
+  await expect(code).not.toHaveText(newCode);
+});
+
 test('动态站点配置进入首屏 HTML，后台和文档深链由同一站点提供', async ({ request, adminApi }) => {
   const original = await apiData<{site_name:string;custom_css:string;favicon_url:string}>(adminApi.get('/api/config'));
   try {

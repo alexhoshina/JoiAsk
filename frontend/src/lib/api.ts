@@ -143,8 +143,14 @@ export async function startAccountVerification(bilibiliUid: string): Promise<Api
   return res.json();
 }
 
-export async function getAccountVerification(): Promise<ApiResponse<VerificationStatus>> {
-  const res = await fetch(`${API_BASE}/account/verification`, { credentials: 'include' });
+export async function getAccountVerification(signal?: AbortSignal): Promise<ApiResponse<VerificationStatus>> {
+  const res = await fetch(`${API_BASE}/account/verification`, { credentials: 'include', cache: 'no-store', signal });
+  return res.json();
+}
+
+export async function cancelAccountVerification(bilibiliUid: string): Promise<ApiResponse<null>> {
+  const params = new URLSearchParams({ bilibili_uid: bilibiliUid });
+  const res = await fetch(`${API_BASE}/account/verification?${params}`, { method: 'DELETE', credentials: 'include' });
   return res.json();
 }
 
@@ -153,12 +159,12 @@ export async function checkAccountVerification(): Promise<ApiResponse<Verificati
   return res.json();
 }
 
-export async function registerAccount(username: string, password: string): Promise<ApiResponse<AccountUser>> {
+export async function registerAccount(username: string, password: string, bilibiliUid?: string): Promise<ApiResponse<AccountUser>> {
   const res = await fetch(`${API_BASE}/account/register`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, bilibili_uid: bilibiliUid }),
   });
   return res.json();
 }

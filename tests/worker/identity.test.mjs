@@ -18,7 +18,7 @@ const profileAPI = 'https://uapis.cn/api/v1/social/bilibili/userinfo';
 const avatarURL = 'https://i0.hdslb.com/test.png';
 let runtime, env, certificates, smtp, implicitTLS, startTLS, capturedMail;
 let currentSignature = '';
-let profileResponse;
+let profileResponse, avatarResponse;
 const outboundRequests = [];
 const smtpCommands = [];
 const encryptedEnvelopes = [];
@@ -86,7 +86,10 @@ async function upstream(request) {
   if (url.origin + url.pathname === profileAPI && url.searchParams.has('uid')) {
     return (profileResponse ?? userInfoResponse)(url.searchParams.get('uid'));
   }
-  if (url.href === avatarURL) return new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10));
+  if (url.href === avatarURL) {
+    if (avatarResponse) await avatarResponse();
+    return new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10));
+  }
   return new Response('Unrecognized test upstream', { status: 404 });
 }
 
@@ -287,6 +290,103 @@ test('UApiPro failures, invalid profiles and stale responses preserve a challeng
   const verified = await call('account/verification/check', {});
   assert.equal(verified.data.status, 'verified');
   assert.equal(verified.data.bilibili_uid, uid);
+});
+
+test('only the owning browser can cancel and failed UID changes preserve its previous challenge', async () => {
+  const owner = browser({ 'CF-Connecting-IP': '192.0.2.61' });
+  const stranger = browser({ 'CF-Connecting-IP': '192.0.2.62' });
+  const start = (call, uid) => call('account/verification', { bilibili_uid: uid });
+  const cancel = call => call('account/verification', undefined, 'DELETE');
+  const original = await start(owner, '610');
+  assert.equal(original.code, 200);
+  const outsider = await start(stranger, '611');
+  assert.equal(outsider.code, 200);
+
+  const forged = browser({ Cookie: 'joi_challenge=' + original.data.challenge_code });
+  assert.equal((await forged('account/verification?uid=610', original.data, 'DELETE')).code, 200);
+  const occupied = await start(owner, '611');
+  assert.equal(occupied.code, 409);
+  assert.match(occupied.message, /正在验证/);
+  assert.equal((await start(owner, 'invalid')).code, 400);
+  assert.deepEqual((await owner('account/verification')).data, original.data);
+  assert.deepEqual((await stranger('account/verification')).data, outsider.data);
+
+  const replacement = await start(owner, '612');
+  assert.equal(replacement.data.bilibili_uid, '612');
+  assert.notEqual(replacement.data.challenge_code, original.data.challenge_code);
+  assert.equal((await owner('account/verification?bilibili_uid=610', undefined, 'DELETE')).code, 409);
+  assert.equal((await start(stranger, '610')).code, 200);
+  assert.equal((await owner('account/verification?bilibili_uid=612', undefined, 'DELETE')).code, 200);
+  assert.equal((await cancel(owner)).code, 200);
+  assert.equal((await owner('account/verification')).code, 404);
+  assert.equal((await stranger('account/verification')).data.bilibili_uid, '610');
+
+  const changes = await Promise.all([start(owner, '613'), start(owner, '614')]);
+  assert.ok(changes.some(change => change.code === 200));
+  const active = await owner('account/verification');
+  assert.ok(['613', '614'].includes(active.data.bilibili_uid));
+  const rows = await env.DB.prepare("SELECT bilibili_uid FROM signature_challenges WHERE bilibili_uid IN ('613','614')").all();
+  assert.deepEqual(rows.results, [{ bilibili_uid: active.data.bilibili_uid }]);
+});
+
+test('a stale registration form cannot create the newly verified UID from another tab', async (t) => {
+  const owner = browser({ 'CF-Connecting-IP': '192.0.2.65' });
+  t.after(() => { currentSignature = ''; });
+  for (const uid of ['650', '651']) {
+    const start = await owner('account/verification', { bilibili_uid: uid });
+    currentSignature = start.data.challenge_code;
+    assert.equal((await owner('account/verification/check', {})).data.status, 'verified');
+  }
+  const account = { username: 'current-tab', password };
+  const stale = await owner('account/register', { ...account, bilibili_uid: '650' });
+  assert.equal(stale.code, 409);
+  assert.match(stale.message, /验证已变更/);
+  assert.equal((await owner('account/verification')).data.bilibili_uid, '651');
+  const created = await owner('account/register', { ...account, bilibili_uid: '651' });
+  assert.equal(created.data.bilibili_uid, '651');
+});
+
+test('a slow signature check cannot verify a replacement challenge', async (t) => {
+  const owner = browser({ 'CF-Connecting-IP': '192.0.2.63' });
+  const original = await owner('account/verification', { bilibili_uid: '630' });
+  const waiting = Promise.withResolvers(), release = Promise.withResolvers();
+  profileResponse = async uid => {
+    waiting.resolve();
+    await release.promise;
+    return Response.json({ mid: uid, name: '测试用户', face: avatarURL, sign: original.data.challenge_code });
+  };
+  t.after(() => { release.resolve(); profileResponse = undefined; });
+  const checking = owner('account/verification/check', {});
+  await waiting.promise;
+  const replacement = await owner('account/verification', { bilibili_uid: '631' });
+  assert.equal(replacement.code, 200);
+  release.resolve();
+  assert.equal((await checking).code, 410);
+  assert.deepEqual((await owner('account/verification')).data, replacement.data);
+});
+
+test('canceling a verified generation invalidates its in-flight registration even after the same UID re-verifies', async (t) => {
+  const owner = browser({ 'CF-Connecting-IP': '192.0.2.64' });
+  const uid = '640';
+  const verify = async () => {
+    const started = await owner('account/verification', { bilibili_uid: uid });
+    currentSignature = started.data.challenge_code;
+    assert.equal((await owner('account/verification/check', {})).data.status, 'verified');
+    return started.data.challenge_code;
+  };
+  const waiting = Promise.withResolvers(), release = Promise.withResolvers();
+  t.after(() => { release.resolve(); avatarResponse = undefined; currentSignature = ''; });
+  const firstCode = await verify();
+  avatarResponse = async () => { waiting.resolve(); await release.promise; };
+  const registering = owner('account/register', { username: 'discarded-registration', password });
+  await waiting.promise;
+  assert.equal((await owner('account/verification', undefined, 'DELETE')).code, 200);
+  assert.equal((await owner('account/verification')).code, 404);
+  assert.notEqual(await verify(), firstCode);
+  release.resolve();
+  assert.equal((await registering).code, 410);
+  assert.equal((await owner('account/verification')).data.status, 'verified');
+  assert.equal(await env.DB.prepare('SELECT 1 FROM users WHERE bilibili_uid=?').bind(uid).first(), null);
 });
 
 test('administrator authorization checks roles and revokes obsolete sessions independently of member login', async () => {
