@@ -16,7 +16,8 @@ const domain = 'https://ask.example';
 const password = 'local-test-credential';
 let runtime, env, certificates, smtp, implicitTLS, startTLS, capturedMail;
 let currentSignature = '';
-let returnedUID;
+let profileResponse;
+const outboundRequests = [];
 const smtpCommands = [];
 const encryptedEnvelopes = [];
 
@@ -73,14 +74,18 @@ function mailboxServer(mode, tlsOptions) {
   return mode === 'tls' ? createTLSServer(tlsOptions,serve) : createServer(serve);
 }
 
+function cardResponse(mid) {
+  return Response.json({
+    code: 0,
+    data: { card: { mid, name: '测试用户', face: 'https://i0.hdslb.com/test.png', sign: currentSignature } }
+  });
+}
+
 async function upstream(request) {
   const url = new URL(request.url);
-  if (url.hostname === 'm.bilibili.com') {
-    const uid = url.pathname.split('/').pop();
-    // Bilibili emits an unquoted JSON integer. A UID may exceed Number.MAX_SAFE_INTEGER.
-    const state = JSON.stringify({ space: { info: { mid: 'TEST_MID', name: '测试用户', face: 'https://i0.hdslb.com/test.png', sign: currentSignature } } })
-      .replace('"TEST_MID"', returnedUID ?? uid);
-    return new Response('window.__INITIAL_STATE__=' + state + ';(function(){');
+  outboundRequests.push({ url: request.url, method: request.method, cookie: request.headers.get('cookie') });
+  if (url.origin === 'https://api.bilibili.com' && url.pathname === '/x/web-interface/card' && url.searchParams.has('mid')) {
+    return (profileResponse ?? cardResponse)(url.searchParams.get('mid'));
   }
   if (url.hostname === 'i0.hdslb.com') return new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10));
   return new Response('Unrecognized test upstream', { status: 404 });
@@ -176,7 +181,8 @@ async function seedMember(uid, username) {
     .bind(uid, username, await hashPassword(password), username, '', new Date().toISOString()).run();
 }
 
-test('signature belongs to its browser and UID, expires, and is consumed by exactly one registration', async () => {
+test('signature belongs to its browser and UID, expires, and is consumed by exactly one registration', async (t) => {
+  t.after(() => { profileResponse = undefined; currentSignature = ''; });
   const call = browser(), stranger = browser(), uid = '9007199254740995';
   const start = await call('account/verification', { bilibili_uid: uid });
   assert.equal(start.code, 200);
@@ -186,15 +192,18 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   assert.equal((await call('account/verification/check', {})).code, 429);
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   currentSignature = start.data.challenge_code;
-  returnedUID = '123';
+  profileResponse = () => cardResponse('123');
   assert.equal((await call('account/verification/check', {})).code, 502);
-  returnedUID = undefined;
+  assert.equal((await call('account/verification')).data.challenge_code, start.data.challenge_code);
+  profileResponse = undefined;
   for (const invalid of ['前缀' + start.data.challenge_code, start.data.challenge_code + ' 后缀', ' ' + start.data.challenge_code]) {
     currentSignature = invalid;
     await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
     assert.equal((await call('account/verification/check', {})).code, 409);
   }
   currentSignature = start.data.challenge_code;
+  // Also accept an exact integer literal even when its UID exceeds Number.MAX_SAFE_INTEGER.
+  profileResponse = uid => cardResponse(JSON.rawJSON(uid));
   await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
   assert.equal((await call('account/verification/check', {})).data.status, 'verified');
   const register = () => call('account/register', { username: 'alice', password });
@@ -210,6 +219,43 @@ test('signature belongs to its browser and UID, expires, and is consumed by exac
   assert.equal(other.code, 200);
   await env.DB.prepare('UPDATE signature_challenges SET expires_at=0 WHERE bilibili_uid=?').bind('234').run();
   assert.equal((await stranger('account/verification/check', {})).code, 410);
+});
+
+test('unavailable or invalid Bilibili cards preserve a challenge for another manual check', async (t) => {
+  t.after(() => { profileResponse = undefined; currentSignature = ''; });
+  const call = browser();
+  const uid = '9007199254740993';
+  const start = await call('account/verification', { bilibili_uid: uid });
+  assert.equal(start.code, 200);
+  currentSignature = start.data.challenge_code;
+  const expectedRequest = { url: 'https://api.bilibili.com/x/web-interface/card?mid=' + uid, method: 'GET', cookie: null };
+  for (const [label, response, restricted] of [
+    ['HTTP 412', () => new Response('upstream denied', { status: 412 }), true],
+    ['API -412', () => Response.json({ code: -412, data: null }), true],
+    ['API -352', () => Response.json({ code: -352, data: null }), true],
+    ['malformed UID', () => cardResponse('invalid'), false],
+    ['different UID', () => cardResponse('9007199254740992'), false],
+    ['no card', () => Response.json({ code: 0, data: {} }), false],
+  ]) {
+    profileResponse = response;
+    await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
+    const firstRequest = outboundRequests.length;
+    const result = await call('account/verification/check', {});
+    assert.equal(result.code, 502, label);
+    if (restricted) {
+      assert.match(result.message, /B\s*站/, label);
+      assert.match(result.message, /限制|风控|拦截/, label);
+    }
+    const recovered = await call('account/verification');
+    assert.equal(recovered.data.status, 'pending', label);
+    assert.equal(recovered.data.challenge_code, start.data.challenge_code, label);
+    assert.deepEqual(outboundRequests.slice(firstRequest), [expectedRequest], label);
+  }
+  profileResponse = undefined;
+  await env.DB.prepare('UPDATE signature_challenges SET next_check=0 WHERE bilibili_uid=?').bind(uid).run();
+  const verified = await call('account/verification/check', {});
+  assert.equal(verified.data.status, 'verified');
+  assert.equal(verified.data.bilibili_uid, uid);
 });
 
 test('administrator authorization checks roles and revokes obsolete sessions independently of member login', async () => {

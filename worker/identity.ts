@@ -1,6 +1,6 @@
 import { ok, fail } from './common';
 import { hashPassword, verifyPassword } from './password.mjs';
-import { fetchProfile } from './bilibili';
+import { fetchProfile, profileFailureMessage } from './bilibili';
 import { AvatarUnavailable, createMemberWithAvatar } from './avatars';
 import { signature } from './signature';
 import { emailRoute } from './email';
@@ -87,8 +87,8 @@ async function members(req: Request, env: Env, path: string, actor: AdminRow) {
     let profile;
     try {
       profile = await fetchProfile(uid);
-    } catch {
-      return fail(502, '获取 B 站公开资料失败，请稍后重试');
+    } catch (error) {
+      return fail(502, profileFailureMessage(error));
     }
     const user = await createMemberWithAvatar(env, {
       uid,

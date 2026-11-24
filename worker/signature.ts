@@ -1,6 +1,6 @@
 import { ok, fail } from './common';
 import { hashPassword, randomHex } from './password.mjs';
-import { fetchProfile } from './bilibili';
+import { fetchProfile, profileFailureMessage } from './bilibili';
 import { createMemberWithAvatar } from './avatars';
 import {
   canonicalUID, conflict, cookieDigest, digestKey, jsonObject, loginSession, publicMember, rateLimit,
@@ -83,8 +83,7 @@ export async function signature(req: Request, env: Env, path: string) {
     try {
       profile = await fetchProfile(challenge.bilibili_uid);
     } catch (error) {
-      console.warn('Bilibili profile check failed', error instanceof Error ? error.message : 'invalid upstream response');
-      return fail(502, '暂时无法读取 B 站公开签名，请稍后重试');
+      return fail(502, profileFailureMessage(error));
     }
     if (profile.signature !== challenge.challenge_code) {
       return fail(409, '公开签名与验证码不一致。请将完整签名替换为本次验证码，保存后稍候重试');
