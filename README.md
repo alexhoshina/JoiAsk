@@ -40,7 +40,7 @@
 | `JOIASK_INITIAL_ADMIN_USERNAME` | 自选的首个超级管理员用户名 |
 | `JOIASK_INITIAL_ADMIN_PASSWORD` | 该管理员的登录密码 |
 
-将 **Build command** 留空，**Deploy command** 设为 `npm run release`。部署完成后打开站点的 `/admin/`，用表单中设置的用户名和密码登录。首次登录成功时，系统会创建超级管理员账号。
+保留按钮预填的 **Build command** `npm run build` 和 **Deploy command** `npm run deploy`。构建完成后，部署命令会先对绑定的 D1 应用待执行的迁移，成功后才发布 Worker。打开站点的 `/admin/`，用表单中的用户名和密码首次登录，即可创建超级管理员账号。
 
 账号创建后，可在 Worker 的 **Settings → Variables and Secrets** 移除两个 `JOIASK_INITIAL_ADMIN_*` 设置，保留两个长期密钥，再点击 **Deploy**。以后继续使用已创建的账号登录。已有账号可通过[管理员 CLI](./docs/content/guide/administrators.mdx) 恢复。
 

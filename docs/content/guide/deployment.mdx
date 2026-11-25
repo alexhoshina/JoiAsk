@@ -8,7 +8,7 @@ title: "部署与更新"
 
 ### 使用部署按钮
 
-从 README 点击 **Deploy to Cloudflare**，选择账号和站点资源，启用 R2。将 **Build command** 留空，**Deploy command** 设为 `npm run release`。它会先构建，再对绑定的 D1 执行 SQL，成功后才发布代码。模板创建的仓库副本包含本站的资源配置。[Cloudflare 部署按钮](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
+从 README 点击 **Deploy to Cloudflare**，选择账号和站点资源，启用 R2。保留预填的 **Build command** `npm run build` 和 **Deploy command** `npm run deploy`。前者构建站点，后者先对 `DB` 绑定的 D1 应用待执行的迁移，成功后才发布 Worker。按钮创建的仓库副本保存本站的资源配置。[Cloudflare 部署按钮](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
 
 在部署表单中，为 `SESSION_SECRET` 和 `SETTINGS_KEY` 各填写一个独立的随机值，每个至少 32 字节。请在后续部署中继续使用这两个密钥。
 
@@ -44,13 +44,17 @@ npm run release -- --secrets-file .dev.vars.production
 
 ## 更新和预检
 
-在站点自己的仓库中运行 `npm ci` 和 `npm run release`。单独检查构建与上传包时，在本地运行：
+在站点自己的仓库中运行 `npm ci` 和 `npm run release`。`release` 先构建一次，再调用 `deploy` 完成迁移与发布。
+
+旧版按钮创建的仓库如果仍在 `deploy` 中直接调用 `wrangler deploy`，请在该 Worker 的 **Settings → Builds** 中保留构建命令 `npm run build`，将部署命令设为 `npm run db:migrate && npm run deploy` 并重新部署。仓库合入新版发布脚本后，部署命令即可改回 `npm run deploy`。
+
+要在本地预检部署包，运行以下命令。
 
 ```sh
 npm run build
 npm run check:deploy
 ```
 
-`build` 产生 Worker 和静态资源，`deploy` 将已构建的产物交给 Wrangler。两个预检步骤都只操作本地文件。自定义域名可在目标 Worker 的设置中绑定。构建前设置 `SITE_ORIGIN`（例如 `https://ask.example.com`），文档站点地图将使用对应域名。
+`check:deploy` 使用 Wrangler 的 `--dry-run` 在本地检查构建产物。自定义域名可在目标 Worker 的设置中绑定。构建前设置 `SITE_ORIGIN`（例如 `https://ask.example.com`），文档站点地图将使用对应域名。
 
 发布后可访问 `/`、`/admin/` 和 `/docs/`，并用两个浏览器检查投稿与实时互动。SMTP 送达和 B 站签名读取需在实际部署环境验证。
