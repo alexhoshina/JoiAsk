@@ -1,14 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { finished, root, startNode, withLocalSecrets, wrangler, wranglerBin } from './worker-cli.mjs';
+import { finished, root, runBuild, startNode, withLocalSecrets, wrangler, wranglerBin } from './worker-cli.mjs';
 
 const secretFile = path.join(root, '.dev.vars');
 try {
   await writeFile(secretFile, 'SESSION_SECRET=' + randomBytes(32).toString('hex') + '\nSETTINGS_KEY=' +
     randomBytes(32).toString('hex') + '\n', { flag: 'wx', mode: 0o600 });
 } catch (err) { if (err.code !== 'EEXIST') throw err; }
-await finished(startNode(path.join(root, 'scripts/build.mjs'), []));
+await runBuild();
 await wrangler('d1', 'migrations', 'apply', 'DB', '--local', '--config', 'wrangler.jsonc');
 await withLocalSecrets(secretFile, async config => {
   const child = startNode(wranglerBin, ['dev', '--local', '--config', config, '--env-file', secretFile,

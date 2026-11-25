@@ -31,13 +31,12 @@ jobs:
       - run: npm run typecheck:worker
       - run: npm run test:e2e:typecheck
       - run: npm test
-      - run: npm run build
+      - run: npm run deploy -- --dry-run
       - run: npm --prefix docs test
       - run: npx tsc --noEmit -p frontend && npx tsc --noEmit -p admin
       - run: npm --prefix frontend run lint && npm --prefix admin run lint
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - run: npm run deploy -- --dry-run
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

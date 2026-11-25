@@ -1,6 +1,6 @@
 # 开发 JoiAsk Workers 版
 
-使用 Node.js 24，在仓库根目录执行 `npm ci`。根包管理 CLI 和测试工具，安装脚本也会按照各自的锁文件安装前台、后台与文档依赖。
+使用 Node.js 24，在仓库根目录执行 `npm ci`，安装 Worker、前台、管理后台、文档和测试工具所需的依赖。在同一目录执行 `npm run build` 即可生成完整部署产物。Worker 服务端代码位于 `dist/server/`，静态资源位于 `dist/client/`，其中 `admin/` 包含后台页面和 Monaco 编辑器，`docs/` 包含文档站点。
 
 ## 本地运行
 
@@ -16,11 +16,10 @@ SMTP 集成测试会使用 OpenSSL 临时签发本地测试证书。Linux 和 ma
 npm run typecheck:worker
 npm run test:e2e:typecheck
 npm test
-npm run build
+npm run deploy -- --dry-run
 npm --prefix docs test
 npx playwright install chromium
 npm run test:e2e
-npm run deploy -- --dry-run
 ```
 
 浏览器测试启动独立的本地 Worker，从空库创建一次性管理员。测试使用临时资源，不读开发数据库。SMTP、签名读取和模型审核的自动化检查使用可控服务。站长在自己的 Cloudflare 环境完成真实主页读取和邮件送达验收。

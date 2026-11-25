@@ -5,7 +5,11 @@
   "description": "JoiAsk Question Box",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "node scripts/build.mjs",
+    "build": "cross-env JOIASK_INITIAL_ADMIN_USERNAME= JOIASK_INITIAL_ADMIN_PASSWORD= NEXT_TELEMETRY_DISABLED=1 WRANGLER_SEND_METRICS=false npm run build:apps",
+    "build:apps": "npm --prefix frontend run build && npm --prefix admin run build && npm run build:docs && npm run build:assets",
+    "build:assets": "npm run copy:asset -- admin/out dist/client/admin && npm run copy:asset -- docs/out dist/client/docs && npm run build:monaco",
+    "build:monaco": "npm run copy:asset -- admin/node_modules/monaco-editor/min/vs dist/client/admin/monaco/vs && npm run copy:asset -- admin/node_modules/monaco-editor/LICENSE dist/client/admin/monaco/LICENSE && npm run copy:asset -- admin/node_modules/monaco-editor/ThirdPartyNotices.txt dist/client/admin/monaco/ThirdPartyNotices.txt",
+    "copy:asset": "node -e \"require('node:fs').cpSync(process.argv[1], process.argv[2], { recursive: true })\"",
     "deploy": "node scripts/deploy.mjs",
     "admin": "node scripts/admin.mjs",
     "build:docs": "npm --prefix docs run build",
@@ -16,7 +20,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:typecheck": "tsc --project tests/e2e/tsconfig.json",
-    "postinstall": "node scripts/install-apps.mjs",
+    "postinstall": "npm --prefix frontend ci --include=dev --no-fund --no-audit && npm --prefix admin ci --include=dev --no-fund --no-audit && npm --prefix docs ci --include=dev --no-fund --no-audit",
     "test": "npm run test:content-markup && npm run test:worker"
   },
   "devDependencies": {
@@ -24,6 +28,7 @@
     "@playwright/test": "^1.65.0",
     "@types/node": "^22.20.5",
     "@types/nodemailer": "^8.0.2",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
     "miniflare": "^5.20261123.0-beta",
     "typescript": "^5.9.3",

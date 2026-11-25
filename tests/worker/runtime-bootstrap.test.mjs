@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { unstable_splitSqlQuery } from 'wrangler';
-import { applySiteMigrations } from '../../scripts/initial-admin.mjs';
+import { applySiteMigrations } from '../../scripts/deploy.mjs';
 import { hashPassword, verifyPassword } from '../../worker/password.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));

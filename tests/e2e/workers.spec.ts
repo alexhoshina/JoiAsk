@@ -108,6 +108,15 @@ test('动态站点配置进入首屏 HTML，后台和文档深链由同一站点
   }
 });
 
+test('管理后台从本站加载 CSS 编辑器', async ({ adminPage }) => {
+  const [loader] = await Promise.all([
+    adminPage.waitForResponse('/admin/monaco/vs/loader.js'),
+    adminPage.goto('/admin/dashboard/custom/'),
+  ]);
+  expect(loader.ok()).toBeTruthy();
+  await expect(adminPage.locator('.monaco-editor')).toBeVisible();
+});
+
 test('设置读写隐藏 SMTP 密码和模型密钥，普通访客只能读取公开配置', async ({ request, adminApi }) => {
   const original = await apiData<Record<string, unknown>>(adminApi.get('/api/settings'));
   try {

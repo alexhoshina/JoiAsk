@@ -70,7 +70,7 @@ npm ci
 npm run dev
 ```
 
-本地运行使用独立资源。本地管理员的创建方式见[快速开始](docs/content/guide/quick-start.mdx)，测试和构建命令见[开发指南](CONTRIBUTING.md)。
+本地运行使用独立资源。要单独构建完整站点，在仓库根目录执行 `npm run build`。本地管理员的创建方式见[快速开始](docs/content/guide/quick-start.mdx)，测试命令见[开发指南](CONTRIBUTING.md)。
 
 ## 参与开发
 

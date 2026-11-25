@@ -28,6 +28,13 @@ export async function finished(child) {
 }
 export const wrangler = (...args) => finished(startNode(wranglerBin, args));
 
+export function runBuild() {
+  // Use the same npm lifecycle for a direct CLI invocation and an npm script.
+  return finished(spawn('npm run build', {
+    cwd: root, shell: true, stdio: 'inherit', windowsHide: true, env: childEnvironment(),
+  }));
+}
+
 export async function builtConfig() {
   // Vite writes a deployment pointer alongside its source configuration.
   for (const dir of [path.join(root, 'frontend'), root]) {
