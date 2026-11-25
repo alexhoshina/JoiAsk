@@ -39,48 +39,25 @@
 2. 点击 **Add**。添加 `JOIASK_INITIAL_ADMIN_USERNAME`，类型选 **Text**，填入自选管理员名。若希望在控制台隐藏用户名，也可选 **Secret**。再添加 `JOIASK_INITIAL_ADMIN_PASSWORD`，类型选 **Secret**，填入自选密码。点击 **Deploy**。
 3. 打开站点的 `/admin/`，用上述用户名和密码登录。首次登录成功后，可从同一设置页移除这两项并再次点击 **Deploy**。以后继续使用已创建的账号登录。
 
-这两项仅用于新站首次创建超级管理员。用户名选 Text 时，普通访客也无法从站点读取这个变量。已有站点的账号恢复使用下面的管理员 CLI。
+这两项仅用于新站首次创建超级管理员。用户名选 Text 时，普通访客也无法从站点读取这个变量。已有站点可以通过[管理员 CLI](./docs/content/guide/administrators.mdx) 恢复账号。
 
 ### 命令行部署
 
-使用 Node.js 24，在仓库根目录安装依赖。首次部署先生成本地私密文件并确认 Wrangler 登录的是目标 Cloudflare 账户。保管好密钥，后续部署沿用相同值。
+**更新已有站点。** 在已安装依赖、已登录 Wrangler 的仓库根目录执行以下命令。将 `my-joiask` 换成部署时使用的 Worker 名称。
 
 ```sh
-npm ci
-npx wrangler login
-node -e "const {randomBytes}=require('node:crypto'); const key=()=>randomBytes(32).toString('hex'); require('node:fs').writeFileSync('.dev.vars.production', 'SESSION_SECRET='+key()+'\nSETTINGS_KEY='+key()+'\n', {flag:'wx',mode:0o600})"
+npm run deploy -- --name my-joiask
 ```
 
-使用命令行时，也可在首次部署新 D1 的同时创建超级管理员。以下 PowerShell 7 示例会提示输入密码，仅在本次部署进程中提供管理员凭据。`.dev.vars.production` 继续用于发布两个长期运行密钥。
+部署命令会完成构建和 D1 迁移。目标 Worker 已配置 `SESSION_SECRET` 和 `SETTINGS_KEY` 时，首次发布本项目和后续更新都可以沿用面板里的密钥。使用默认名称 `joiask` 的站点直接运行 `npm run deploy` 即可。
 
-```powershell
-$env:JOIASK_INITIAL_ADMIN_USERNAME = 'operator'
-try {
-    $env:JOIASK_INITIAL_ADMIN_PASSWORD = Read-Host -MaskInput '首个管理员密码'
-    npm run deploy -- --secrets-file .dev.vars.production
-} finally {
-    $env:JOIASK_INITIAL_ADMIN_USERNAME = $null
-    $env:JOIASK_INITIAL_ADMIN_PASSWORD = $null
-}
-```
-
-如果想在发布后从控制台设置首个管理员，直接运行 `npm run deploy -- --secrets-file .dev.vars.production` 即可。也可以使用管理员 CLI 创建账号或重置密码。CLI 从标准输入读取密码，并使用与远程 Worker 相同的 D1 绑定配置。
-
-PowerShell 7 创建账号的命令如下。
-
-```powershell
-Read-Host -MaskInput '管理员密码' | node scripts/admin.mjs --remote create operator
-```
-
-在 Bash 中执行：
+**首次部署新站。** 使用 Node.js 24，在仓库根目录执行 `npm ci`。交互式部署前，通过 `npx wrangler login` 登录目标账号。自行准备两个独立的随机密钥，每个至少 32 字节。在本地 `.dev.vars.production` 文件中分别填写 `SESSION_SECRET` 和 `SETTINGS_KEY`，然后发布。[密钥文件格式](./docs/content/guide/deployment.mdx)
 
 ```sh
-read -rs -p "管理员密码: " pass
-printf '%s\n' "$pass" | node scripts/admin.mjs --remote create operator
-unset pass
+npm run deploy -- --name my-joiask --secrets-file .dev.vars.production
 ```
 
-打开站点的 `/`、`/admin/` 和 `/docs/`。在后台按需启用通用 SMTP、配置兼容 Chat Completions 的模型服务。会员通过 B 站公开个性签名验证 UID，验证成功即可恢复原签名。
+发布成功后，按上面的控制台步骤设置首个管理员。提问箱位于 `/`，管理后台位于 `/admin/`，文档位于 `/docs/`。站长可在后台配置通用 SMTP 和兼容 Chat Completions 的审核服务。会员通过 B 站公开个性签名验证 UID，验证成功即可恢复原签名。
 
 默认从 B 站原生名片接口读取资料。使用自建反代时，超级管理员在后台「设置」填入完整接口地址（例如 `https://bili.example.com/card`），Worker 会自动附上 `mid` 查询参数。[配置说明](./docs/content/guide/configuration.mdx)
 
@@ -93,7 +70,7 @@ npm ci
 npm run dev
 ```
 
-本地运行使用独立资源。将管理员命令中的 `--remote` 换成 `--local` 即可初始化开发账号。测试、构建和运维命令见[开发指南](CONTRIBUTING.md)和[管理员指南](docs/content/guide/administrators.mdx)。
+本地运行使用独立资源。本地管理员的创建方式见[快速开始](docs/content/guide/quick-start.mdx)，测试和构建命令见[开发指南](CONTRIBUTING.md)。
 
 ## 参与开发
 

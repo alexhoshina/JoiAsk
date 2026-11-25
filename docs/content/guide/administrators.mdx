@@ -17,3 +17,20 @@ node scripts/admin.mjs --remote promote site-admin
 Bash 用户可以参考[快速开始](./quick-start.mdx)中的掩码输入示例，将目标改为 `--remote`。如果部署指定了 Worker 名称，在远端管理命令中使用相同的 `--name <Worker 名称>`。如果使用自定义 Wrangler 配置，请给命令添加 `--config <路径>`，并确认其中的 `DB` 绑定与实际运行的 Worker 一致。重置密码会撤销已有管理员会话。
 
 超级管理员在管理后台管理管理员账号。普通会员可在前台使用绑定的邮箱重置密码。流程见[投稿与邮箱](./usage.mdx)。
+
+## 在首次部署时从命令行创建管理员
+
+对于使用全新 D1 的站点，也可以让部署命令一次性创建首个超级管理员。在 CI 中把 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 同时提供给部署步骤，密码通过 CI 的保密变量传入。首建成功后即可移除这两个变量。
+
+在本机 Bash 中，使用已准备好的生产密钥文件运行以下示例。将 `my-joiask` 替换为目标 Worker 名称。管理员密码通过隐藏提示输入，部署结束后变量随子 shell 一起释放。
+
+```bash
+(
+  set +x
+  export JOIASK_INITIAL_ADMIN_USERNAME=site-admin
+  IFS= read -rs -p '首个管理员密码：' JOIASK_INITIAL_ADMIN_PASSWORD || exit 1
+  printf '\n'
+  export JOIASK_INITIAL_ADMIN_PASSWORD
+  npm run deploy -- --name my-joiask --secrets-file .dev.vars.production
+)
+```
