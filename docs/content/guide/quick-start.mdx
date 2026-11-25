@@ -15,7 +15,7 @@ npm run dev
 
 首次启动会构建用户站、管理后台与文档，生成本地密钥，初始化 D1 后启动 Wrangler。浏览器打开终端显示的地址。
 
-## 2. 创建管理员
+## 2. 创建本地管理员
 
 保持本地服务运行，在另一个终端执行：
 
@@ -37,4 +37,4 @@ unset password
 
 ## 3. 发布站点
 
-按[部署与更新](./deployment.mdx)连接 Cloudflare 账号并创建远端资源。生产管理员使用相同命令的 `--remote` 参数在远端 D1 中创建。
+发布到一个全新的 D1 时，可在 `npm run deploy` 的环境中设置 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD`，由部署命令一次性创建首个超级管理员。也可在部署后用上面的 CLI 命令，将 `--local` 换成 `--remote`。[首次部署示例](./deployment.mdx#首次部署与管理员)

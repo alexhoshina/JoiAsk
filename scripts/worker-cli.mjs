@@ -7,10 +7,18 @@ import { fileURLToPath } from 'node:url';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const wranglerBin = path.join(root, 'node_modules/wrangler/bin/wrangler.js');
+export function childEnvironment(extra) {
+  const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', ...extra };
+  for (const key of Object.keys(env)) {
+    if (/^JOIASK_INITIAL_ADMIN_(USERNAME|PASSWORD)$/i.test(key)) delete env[key];
+  }
+  return env;
+}
+
 export function startNode(script, args, options = {}) {
   return spawn(process.execPath, [script, ...args], {
     cwd: root, stdio: 'inherit', windowsHide: true, ...options,
-    env: { ...process.env, WRANGLER_SEND_METRICS: 'false', ...options.env },
+    env: childEnvironment(options.env),
   });
 }
 export async function finished(child) {

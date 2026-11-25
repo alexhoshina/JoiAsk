@@ -4,6 +4,8 @@ title: "管理员与密码恢复"
 
 新安装没有默认管理员或默认密码。运维 CLI 使用 Wrangler 凭据直接访问指定 D1。本地开发使用 `--local`，已部署的站点使用 `--remote`。生产操作前检查当前 Cloudflare 账号和资源名称。
 
+向新 D1 首次部署时，可以给部署命令同时提供 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 来创建首个超级管理员。首建只执行一次。已有站点需要创建、恢复或提升管理员时请使用下面的 CLI，包括管理员账号已全部删除的情况。[首次部署示例](./deployment.mdx#首次部署与管理员)
+
 以下是 PowerShell 7 中创建、重置与提升权限的命令。创建与重置会从管道读取掩码输入的密码。
 
 ```powershell

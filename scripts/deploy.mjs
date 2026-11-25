@@ -3,8 +3,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  builtConfig, deploymentName, finished, root, startNode, targetManifest, withDeployConfig, wrangler, wranglerBin,
+  builtConfig, childEnvironment, deploymentName, finished, root, startNode, targetManifest, withDeployConfig, wrangler, wranglerBin,
 } from './worker-cli.mjs';
+import { applySiteMigrations } from './initial-admin.mjs';
 
 const usage = 'Usage: npm run deploy -- [--name WORKER] [--dry-run] [--secrets-file PATH]';
 function parseOptions(args) {
@@ -23,7 +24,7 @@ function parseOptions(args) {
 
 function findDatabase(configFile, db) {
   const output = execFileSync(process.execPath, [wranglerBin, 'd1', 'list', '--json', '--config', configFile],
-    { cwd: root, encoding: 'utf8', stdio: ['ignore','pipe','inherit'], maxBuffer: 8 * 1024 * 1024 });
+    { cwd: root, env: childEnvironment(), encoding: 'utf8', stdio: ['ignore','pipe','inherit'], maxBuffer: 8 * 1024 * 1024 });
   return JSON.parse(output).find(item => item.name === db.database_name)?.uuid;
 }
 
@@ -48,6 +49,7 @@ async function resolveDatabase(configFile, db, cli) {
 }
 
 export async function deployBuild(buildFile, {dryRun,name,secrets}, cli = {wrangler,findDatabase}) {
+  const { JOIASK_INITIAL_ADMIN_USERNAME: username, JOIASK_INITIAL_ADMIN_PASSWORD: password } = process.env;
   const source = JSON.parse(await readFile(buildFile,'utf8'));
   const config = targetManifest(source,deploymentName(source,name));
   await withDeployConfig(buildFile,config,async file => {
@@ -58,7 +60,7 @@ export async function deployBuild(buildFile, {dryRun,name,secrets}, cli = {wrang
     const db = config.d1_databases.find(item => item.binding === 'DB');
     db.database_id = await resolveDatabase(file,db,cli);
     await writeFile(file,JSON.stringify(config),{mode:0o600});
-    await cli.wrangler('d1','migrations','apply','DB','--remote','--force','--config',file);
+    await applySiteMigrations(file, config, db, cli, username, password);
     await cli.wrangler('deploy','--config',file,...(secrets ? ['--secrets-file',secrets] : []));
   });
 }

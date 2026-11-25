@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deploymentName, targetDatabase, targetManifest, withDeployConfig } from '../../scripts/worker-cli.mjs';
 import { deployBuild } from '../../scripts/deploy.mjs';
 
@@ -72,7 +73,9 @@ test('a fresh account creates and pins its DB before migrations; existing UUIDs 
     // Match a CI-provided Worker name when running this regression in Workers Builds.
     const name = process.env.WRANGLER_CI_OVERRIDE_NAME || 'button-test';
     const file = path.join(dir,'wrangler.json');
-    await writeFile(file,JSON.stringify(source));
+    const built = structuredClone(source);
+    built.d1_databases[0].migrations_dir = fileURLToPath(new URL('../../migrations', import.meta.url));
+    await writeFile(file,JSON.stringify(built));
     const uuid = '65c7c263-8292-4264-8d04-effa83147c7c';
     const calls = [];
     let exists = false;
@@ -95,7 +98,7 @@ test('a fresh account creates and pins its DB before migrations; existing UUIDs 
     await deployBuild(file,{name},cli);
     assert.deepEqual(calls,['create','remote migrations','deploy']);
 
-    const selected = structuredClone(source);
+    const selected = structuredClone(built);
     selected.d1_databases[0].database_id = uuid;
     await writeFile(file,JSON.stringify(selected));
     calls.length = 0;
