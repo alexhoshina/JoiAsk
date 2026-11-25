@@ -29,9 +29,9 @@
 
 这个分支从空数据库部署 JoiAsk。一个 Worker 提供提问箱、管理后台和文档，D1 保存业务数据，R2 保存图片，Durable Objects 负责实时互动，Queues 负责异步审核。
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fpowerlive-io%2FJoiAsk%2Ftree%2Fcodex%2Fcloudflare-workers)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Falexhoshina%2FJoiAsk%2Ftree%2Fcloudflare-workers)
 
-按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的账号，为这个站点选择 D1、R2 和审核队列，并填写两个长期 Secret：`SESSION_SECRET` 和 `SETTINGS_KEY`。两项各使用独立的随机值，每个至少 32 字节。在按钮的构建设置中，将 **Build command** 留空，**Deploy command** 设为 `npm run release`。这个命令会依次构建站点、初始化数据库并发布 Worker。
+按钮从 `alexhoshina/JoiAsk` 仓库的 `cloudflare-workers` 分支读取模板。选择自己的账号，为这个站点选择 D1、R2 和审核队列，并填写两个长期 Secret：`SESSION_SECRET` 和 `SETTINGS_KEY`。两项各使用独立的随机值，每个至少 32 字节。在按钮的构建设置中，将 **Build command** 留空，**Deploy command** 设为 `npm run release`。这个命令会依次构建站点、初始化数据库并发布 Worker。
 
 ### 在 Cloudflare 控制台设置首个管理员
 
