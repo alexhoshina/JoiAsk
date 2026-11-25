@@ -8,7 +8,7 @@ title: "故障排查"
 
 ## 管理后台不能登录
 
-新站通过 Cloudflare 控制台设置首个管理员时，确认在当前 Worker 的 **Settings → Variables and Secrets** 配置了 `JOIASK_INITIAL_ADMIN_USERNAME`（**Text**，也可选 **Secret**）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（**Secret**），且已点击 **Deploy**。使用这组凭据登录站点的 `/admin/`。已有账号忘记密码时用运维 CLI 的 `reset-password`，需要重建已删除的管理员账号时用 `create`。请确认 CLI 连接的是当前站点的 D1。[管理员 CLI](./administrators.mdx)
+新站首次登录 `/admin/` 时，请使用 Cloudflare 部署表单里填写的管理员用户名和密码。若部署时漏填或填错，可在当前 Worker 的 **Settings → Variables and Secrets** 中设置 `JOIASK_INITIAL_ADMIN_USERNAME`（**Text** 或 **Secret**）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（**Secret**），点击 **Deploy** 后重试。已有账号忘记密码时用运维 CLI 的 `reset-password`，需要重建已删除的管理员账号时用 `create`。请确认 CLI 连接的是当前站点的 D1。[管理员 CLI](./administrators.mdx)
 
 ## 注册无法验证签名
 

@@ -37,4 +37,4 @@ unset password
 
 ## 3. 发布站点
 
-先通过按钮或 CLI 部署新站，再到目标 Worker 的 **Settings → Variables and Secrets** 添加 `JOIASK_INITIAL_ADMIN_USERNAME`（Text 或 Secret）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（Secret）。点击 **Deploy** 后，用这组凭据登录站点的 `/admin/`。[首次部署示例](./deployment.mdx#首次部署与管理员)
+点击 README 中的 **Deploy to Cloudflare**，在部署表单的 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 中填写自选管理员用户名和密码。部署成功后，用这组凭据登录站点的 `/admin/` 即可创建首个超级管理员。使用 CLI 部署时，可随首次发布上传这两项，也可在 Worker 控制台补填。[首次部署示例](./deployment.mdx#首次部署与管理员)

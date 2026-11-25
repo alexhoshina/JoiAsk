@@ -8,7 +8,7 @@ title: "数据库、存储与安全配置"
 
 为 `SESSION_SECRET` 和 `SETTINGS_KEY` 分别准备至少 32 字节的独立随机值，保存为 Worker Secret。会话密钥用于登录状态，设置密钥保护 SMTP 密码和审核服务 API 密钥。本地开发时把单独的开发密钥填入根目录的 `.dev.vars`。请备份生产密钥，更换设置密钥后需要重新录入已加密的配置。
 
-新站可添加两项 Worker 设置来创建首个超级管理员。用户名 `JOIASK_INITIAL_ADMIN_USERNAME` 选 **Text**，若要在控制台隐藏用户名也可选 **Secret**。密码 `JOIASK_INITIAL_ADMIN_PASSWORD` 选 **Secret**。首次登录成功后可移除这两项，同时保留上面的两个长期密钥。[首次部署与管理员](./deployment.mdx#首次部署与管理员)
+新站可在 Cloudflare 部署表单中填写首个超级管理员的用户名 `JOIASK_INITIAL_ADMIN_USERNAME` 和密码 `JOIASK_INITIAL_ADMIN_PASSWORD`。如果部署后在控制台手动添加，用户名可选 **Text** 或 **Secret**，密码选 **Secret**。首次用这组凭据登录 `/admin/` 后可移除这两项，同时保留上面的两个长期密钥。[首次部署与管理员](./deployment.mdx#首次部署与管理员)
 
 ## 内容审核
 

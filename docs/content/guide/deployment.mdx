@@ -10,7 +10,9 @@ title: "部署与更新"
 
 从 README 点击 **Deploy to Cloudflare**，选择账号和站点资源，启用 R2。将 **Build command** 留空，**Deploy command** 设为 `npm run release`。它会先构建，再对绑定的 D1 执行 SQL，成功后才发布代码。模板创建的仓库副本包含本站的资源配置。[Cloudflare 部署按钮](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
 
-给 `SESSION_SECRET` 和 `SETTINGS_KEY` 各填写一个独立的随机值，每个至少 32 字节。请在后续部署中继续使用这两个密钥。
+在部署表单中，为 `SESSION_SECRET` 和 `SETTINGS_KEY` 各填写一个独立的随机值，每个至少 32 字节。请在后续部署中继续使用这两个密钥。
+
+在同一表单的 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 中填写自选管理员用户名和密码。部署完成后，打开站点的 `/admin/`，用这组凭据首次登录，系统即会创建超级管理员账号。登录成功后，可在 Worker 的 **Settings → Variables and Secrets** 中移除这两项管理员凭据并点击 **Deploy**。
 
 ### 使用命令行
 
@@ -26,7 +28,7 @@ npx wrangler queues create joiask-moderation
 
 Wrangler 会把数据库 ID 写入 `wrangler.jsonc` 的 `DB` 绑定。使用自选名称时，先在同一文件设置 Worker 的 `name`、D1 的 `database_name` 和 R2 的 `bucket_name`，并在创建命令中使用对应的资源名。审核队列的生产者与消费者要填写相同的队列名。多个站点各自使用独立资源。
 
-准备私有文件 `.dev.vars.production`，分别以 `SESSION_SECRET=值` 和 `SETTINGS_KEY=值` 填写两个长期密钥。首次发布执行：
+准备私有文件 `.dev.vars.production`，分别以 `SESSION_SECRET=值` 和 `SETTINGS_KEY=值` 填写两个长期密钥。要在首次发布时一并设置管理员，可在同一文件中填写 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD`。首次发布执行：
 
 ```sh
 npm run release -- --secrets-file .dev.vars.production
@@ -36,11 +38,9 @@ npm run release -- --secrets-file .dev.vars.production
 
 ### 在控制台设置首个管理员
 
-1. 打开目标 Worker 的 **Settings → Variables and Secrets**。
+1. 如果新站发布时尚未设置管理员凭据，打开目标 Worker 的 **Settings → Variables and Secrets**。
 2. 添加 `JOIASK_INITIAL_ADMIN_USERNAME`（Text 或 Secret）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（Secret），点击 **Deploy**。
 3. 访问 `/admin/`，用上述凭据首次登录。创建成功后可移除这两项，再点击 **Deploy**。已有账号可通过[管理员 CLI](./administrators.mdx)恢复。
-
-也可以把这两项作为 Worker Secret 随首次发布的 `--secrets-file` 一起上传。账号在首次登录时创建。
 
 ## 更新和预检
 

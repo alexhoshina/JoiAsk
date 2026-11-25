@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "type": "module",
   "description": "JoiAsk Question Box",
+  "cloudflare": {
+    "bindings": {
+      "SESSION_SECRET": {
+        "description": "用于签发登录会话。请生成至少 32 字节的独立随机值，后续部署继续使用。"
+      },
+      "SETTINGS_KEY": {
+        "description": "用于加密站点设置。请单独生成至少 32 字节的随机值，后续部署继续使用。"
+      },
+      "JOIASK_INITIAL_ADMIN_USERNAME": {
+        "description": "为新站的首个超级管理员选择用户名。部署后用它登录 `/admin/`。"
+      },
+      "JOIASK_INITIAL_ADMIN_PASSWORD": {
+        "description": "为该管理员设置登录密码。首次登录成功后即可移除这两项管理员凭据。"
+      }
+    }
+  },
   "scripts": {
     "predev": "npm run build && npm run db:migrate:local",
     "dev": "wrangler dev --local --config dist/server/wrangler.json --env-file .dev.vars --persist-to .wrangler/state",

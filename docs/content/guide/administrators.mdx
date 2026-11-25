@@ -2,7 +2,7 @@
 title: "管理员与密码恢复"
 ---
 
-新安装没有默认管理员或默认密码。新站发布后，在 Worker 的 **Settings → Variables and Secrets** 中添加 `JOIASK_INITIAL_ADMIN_USERNAME`（Text 或 Secret）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（Secret）。点击 **Deploy** 后，用这组凭据登录 `/admin/` 即可创建首个超级管理员。创建成功后可移除这两项。[首次部署说明](./deployment.mdx#首次部署与管理员)
+新站使用 Cloudflare 部署按钮时，在 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 中填写自选管理员用户名和密码。发布后，首次用这组凭据登录 `/admin/` 时，系统会创建超级管理员账号。如果部署时尚未设置这两项，可以在 Worker 的 **Settings → Variables and Secrets** 中补填并点击 **Deploy**。首次登录成功后可移除这两项。[首次部署说明](./deployment.mdx#首次部署与管理员)
 
 管理员 CLI 通过仓库根目录 `wrangler.jsonc` 的 `DB` 绑定访问数据库。使用站点自己的仓库，在本地开发时选 `--local`，在远端管理时选 `--remote`。
 
