@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { crc32, inflateSync } from 'node:zlib';
 import { build } from 'esbuild';
@@ -79,6 +80,7 @@ before(async () => {
         assert.equal(image.type, 'image_url');
         const colors = readBands(image.image_url.url);
         modelRequests.push({ model: body.model, url: url.href, key: request.headers.get('Authorization') });
+        if (body.model === 'slow-vision') await delay(1750);
         const reply = body.model === 'text-only' ? ['black', 'black', 'black', 'black'] : colors;
         return Response.json({ choices: [{ message: { content: JSON.stringify({ colors: reply }) } }] });
       }
@@ -97,6 +99,7 @@ before(async () => {
   await db.prepare("UPDATE config SET site_name='existing site' WHERE id=1").run();
   await migrate('0005_bilibili_profile_url.sql');
   await migrate('0006_ai_auto_publish.sql');
+  await migrate('0007_ai_vision_test_timeout.sql');
   for (const role of ['admin', 'super_admin']) {
     const token = randomBytes(32).toString('hex');
     const digest = createHmac('sha256', secret).update('joi_admin:' + token).digest('hex');
@@ -215,6 +218,41 @@ test('image transfer is opt-in for the selected model and endpoint', async () =>
   assert.equal(modelRequests.length, 7);
   assert.equal((await update({ ai_supports_vision: false })).data.ai_supports_vision, false);
   assert.equal(modelRequests.length, 7);
+});
+
+test('vision timeout validates seconds, governs the current save and never probes for a timeout-only edit', async () => {
+  const path = '/api/settings';
+  const update = body => call(path, 'admin', 'PUT', body);
+  const initial = (await call(path, 'admin')).data;
+  const start = modelRequests.length;
+  assert.equal(initial.ai_vision_test_timeout_seconds, 20);
+  assert.equal(Object.hasOwn((await call('/api/config')).data, 'ai_vision_test_timeout_seconds'), false);
+  assert.equal((await call(path, null, 'PUT', { ai_vision_test_timeout_seconds: 1 })).code, 408);
+  for (const invalid of [0, -1, 301, 1.5, '20', null, true]) {
+    assert.equal((await update({ ai_vision_test_timeout_seconds: invalid })).code, 400);
+  }
+  assert.equal(modelRequests.length, start);
+
+  const slow = { ai_model: 'slow-vision', ai_api_key: 'local-test-key', ai_supports_vision: true };
+  const timedOut = await update({ ...slow, ai_vision_test_timeout_seconds: 1 });
+  assert.equal(timedOut.code, 400);
+  assert.equal(timedOut.message, '视觉测试在 1 秒内未完成，请增加测试超时后重试');
+  assert.equal(modelRequests.length, start + 1);
+  assert.deepEqual((await call(path, 'super_admin')).data, initial);
+  const passed = await update({ ...slow, ai_vision_test_timeout_seconds: 10 });
+  assert.equal(passed.code, 200);
+  assert.equal(passed.data.ai_vision_test_timeout_seconds, 10);
+  assert.equal(passed.data.ai_supports_vision, true);
+  assert.equal(modelRequests.length, start + 2);
+
+  const minimum = await update({ ai_vision_test_timeout_seconds: 1 });
+  assert.equal(minimum.data.ai_vision_test_timeout_seconds, 1);
+  const maximum = await call(path, 'super_admin', 'PUT', { ai_vision_test_timeout_seconds: 300 });
+  assert.equal(maximum.data.ai_vision_test_timeout_seconds, 300);
+  const legacy = await update({ spam_prompt: 'edited without timeout' });
+  assert.equal(legacy.data.ai_vision_test_timeout_seconds, 300);
+  assert.equal((await call(path, 'admin')).data.ai_vision_test_timeout_seconds, 300);
+  assert.equal(modelRequests.length, start + 2);
 });
 
 test('the probe reads the candidate without saving it and rejects upstream errors and the wrong identity', async () => {

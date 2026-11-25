@@ -24,6 +24,7 @@ export interface Settings extends Site {
   ai_api_key: string;
   ai_auto_publish: number;
   ai_supports_vision: number;
+  ai_vision_test_timeout_seconds: number;
   spam_prompt: string;
   smtp_host: string;
   smtp_port: number;
@@ -46,7 +47,8 @@ function exposeSettings(row: Settings) {
   return {
     ai_base_url: row.ai_base_url, ai_model: row.ai_model, ai_api_key: '',
     ai_api_key_configured: !!row.ai_api_key, ai_auto_publish: !!row.ai_auto_publish,
-    ai_supports_vision: !!row.ai_supports_vision, spam_prompt: row.spam_prompt,
+    ai_supports_vision: !!row.ai_supports_vision, ai_vision_test_timeout_seconds: row.ai_vision_test_timeout_seconds,
+    spam_prompt: row.spam_prompt,
     bilibili_profile_url: row.bilibili_profile_url,
     require_verified_user_to_post: !!row.require_verified_user_to_post,
     email: {
@@ -139,6 +141,11 @@ async function updateSettings(env: Env, row: Settings, body: Fields, profileEndp
   const sameModel = endpoint === row.ai_base_url && model === row.ai_model;
   let supportsVision = flag(body.ai_supports_vision === undefined
     ? sameModel && !!row.ai_supports_vision : body.ai_supports_vision);
+  const visionTimeout = body.ai_vision_test_timeout_seconds === undefined
+    ? row.ai_vision_test_timeout_seconds : body.ai_vision_test_timeout_seconds;
+  if (typeof visionTimeout !== 'number' || !Number.isInteger(visionTimeout) || visionTimeout < 1 || visionTimeout > 300) {
+    throw new Invalid('视觉测试超时必须是 1 到 300 之间的整数秒');
+  }
   if (!model || !prompt) throw new Invalid('模型和审核提示词不能为空');
   let key = row.ai_api_key;
   if (body.ai_api_key === null) key = '';
@@ -152,16 +159,18 @@ async function updateSettings(env: Env, row: Settings, body: Fields, profileEndp
     supportsVision = 0;
   }
   if (supportsVision && (!row.ai_supports_vision || !row.ai_api_key || !sameModel || body.ai_api_key)) {
-    const verified = await verifyVision(endpoint, model, await decryptSecret(key, env.SETTINGS_KEY));
-    if (!verified) throw new Invalid('模型未能识别测试图。请检查服务地址、API Key 和模型的图片输入能力，或关闭图片审核后保存');
+    const result = await verifyVision(endpoint, model, await decryptSecret(key, env.SETTINGS_KEY), visionTimeout);
+    if (result === 'timeout') throw new Invalid('视觉测试在 ' + visionTimeout + ' 秒内未完成，请增加测试超时后重试');
+    if (result !== 'passed') throw new Invalid('模型未能识别测试图。请检查服务地址、API Key 和模型的图片输入能力，或关闭图片审核后保存');
   }
   const saved = await env.DB.prepare(`UPDATE config SET email_enabled=?, smtp_host=?, smtp_port=?, smtp_security=?, smtp_username=?,
     smtp_password=?, smtp_from_email=?, smtp_from_name=?, email_site_url=?, ai_base_url=?, ai_model=?,
-    ai_api_key=?, spam_prompt=?, ai_auto_publish=?, ai_supports_vision=?, require_verified_user_to_post=?, bilibili_profile_url=?,
+    ai_api_key=?, spam_prompt=?, ai_auto_publish=?, ai_supports_vision=?, ai_vision_test_timeout_seconds=?,
+    require_verified_user_to_post=?, bilibili_profile_url=?,
     settings_version=settings_version+1
     WHERE id=1 AND settings_version=?`)
     .bind(enabled, host, port || 587, security, username, password, from, name, siteURL, endpoint, model, key, prompt,
-      autoPublish, supportsVision, gated, profileEndpoint, row.settings_version).run();
+      autoPublish, supportsVision, visionTimeout, gated, profileEndpoint, row.settings_version).run();
   if (!saved.meta.changes) throw new Invalid('设置已同时更新，请刷新后再试');
 }
 

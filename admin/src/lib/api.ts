@@ -78,6 +78,7 @@ export interface Settings {
   ai_base_url: string;
   ai_model: string;
   ai_supports_vision: boolean;
+  ai_vision_test_timeout_seconds: number;
   ai_auto_publish: boolean;
   ai_api_key_configured: boolean;
   spam_prompt: string;

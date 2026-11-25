@@ -1,5 +1,35 @@
 import { apiData, test, expect } from './fixtures.js';
 
+test('图片审核关闭时也能保存视觉测试超时，并校验整数范围', async ({ adminApi, adminPage }) => {
+  const getSettings = () => apiData<{ ai_vision_test_timeout_seconds: number; ai_supports_vision: boolean }>(adminApi.get('/api/settings'));
+  const original = await getSettings();
+  expect(original.ai_vision_test_timeout_seconds).toBe(20);
+  expect(original.ai_supports_vision).toBe(false);
+  try {
+    await adminPage.goto('/admin/dashboard/settings/');
+    const input = adminPage.getByRole('spinbutton', { name: '视觉测试超时（秒）' });
+    const save = adminPage.getByRole('button', { name: '保存设置' });
+    await expect(input).toBeEnabled();
+    await expect(input).toHaveValue('20');
+    for (const invalid of ['0', '301', '1.5', '']) {
+      await input.fill(invalid);
+      await save.click();
+      await expect(adminPage.getByText('视觉测试超时必须是 1 至 300 之间的整数')).toBeVisible();
+      expect((await getSettings()).ai_vision_test_timeout_seconds).toBe(20);
+    }
+    for (const seconds of [1, 300]) {
+      await input.fill(String(seconds));
+      await save.click();
+      await expect(adminPage.getByText('保存成功', { exact: true })).toBeVisible();
+      expect(await getSettings()).toMatchObject({ ai_vision_test_timeout_seconds: seconds, ai_supports_vision: false });
+      await adminPage.reload();
+      await expect(input).toHaveValue(String(seconds));
+    }
+  } finally {
+    await apiData(adminApi.put('/api/settings', { data: { ai_vision_test_timeout_seconds: original.ai_vision_test_timeout_seconds } }));
+  }
+});
+
 test('模型图片输入需要重新确认，缺少 API Key 时保留原设置', async ({ adminApi, adminPage }) => {
   type Settings = { ai_model: string; ai_base_url: string; ai_supports_vision: boolean; ai_api_key_configured: boolean };
   const getSettings = () => apiData<Settings>(adminApi.get('/api/settings'));

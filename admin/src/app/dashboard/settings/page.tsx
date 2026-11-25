@@ -48,6 +48,7 @@ export default function SettingsPage() {
   const [baseURL, setBaseURL] = useState("");
   const [model, setModel] = useState("");
   const [supportsVision, setSupportsVision] = useState(false);
+  const [visionTestTimeout, setVisionTestTimeout] = useState("20");
   const [apiKey, setAPIKey] = useState("");
   const [hasKey, setHasKey] = useState(false);
   const [clearKey, setClearKey] = useState(false);
@@ -73,6 +74,7 @@ export default function SettingsPage() {
     setBaseURL(settings.ai_base_url);
     setModel(settings.ai_model);
     setSupportsVision(settings.ai_supports_vision);
+    setVisionTestTimeout(String(settings.ai_vision_test_timeout_seconds));
     setSpamPrompt(settings.spam_prompt);
     setAutoPublish(settings.ai_auto_publish);
     setRequireVerifiedUserToPost(settings.require_verified_user_to_post);
@@ -110,6 +112,12 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
+    const timeoutSeconds = Number(visionTestTimeout);
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300) {
+      setMessage("视觉测试超时必须是 1 至 300 之间的整数");
+      setIsSuccess(false);
+      return;
+    }
     if (!spamPrompt.trim()) {
       setMessage("低质量提问判定标准不能为空");
       setIsSuccess(false);
@@ -125,6 +133,7 @@ export default function SettingsPage() {
         ai_base_url: baseURL.trim(),
         ai_model: model.trim(),
         ai_supports_vision: supportsVision,
+        ai_vision_test_timeout_seconds: timeoutSeconds,
         ai_api_key: clearKey ? null : apiKey.trim(),
         spam_prompt: spamPrompt.trim(),
         ai_auto_publish: autoPublish,
@@ -394,6 +403,25 @@ export default function SettingsPage() {
             </div>
             <p id="ai-supports-vision-help" className="text-sm text-muted-foreground">
               请仅为支持图片输入的模型开启。勾选并保存时，系统会向当前模型发送一张不含投稿内容的测试图。验证通过后，投稿图片会随文字一起发送给模型审核。
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-vision-test-timeout">视觉测试超时（秒）</Label>
+            <Input
+              id="ai-vision-test-timeout"
+              aria-describedby="ai-vision-test-timeout-help"
+              className="max-w-32"
+              type="number"
+              min={1}
+              max={300}
+              step={1}
+              required
+              value={visionTestTimeout}
+              onChange={(event) => setVisionTestTimeout(event.target.value)}
+              disabled={isLoading || isSaving}
+            />
+            <p id="ai-vision-test-timeout-help" className="text-sm text-muted-foreground">
+              设置等待模型识别测试图的时长，可填 1 至 300 秒，默认 20 秒。
             </p>
           </div>
           <div className="space-y-2">

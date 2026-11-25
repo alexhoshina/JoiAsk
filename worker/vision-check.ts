@@ -38,11 +38,13 @@ function colorChart() {
   return { colors, url: 'data:image/png;base64,' + png.toString('base64') };
 }
 
-export async function verifyVision(endpoint: string, model: string, apiKey: string): Promise<boolean> {
+export async function verifyVision(endpoint: string, model: string, apiKey: string, timeoutSeconds: number):
+  Promise<'passed' | 'failed' | 'timeout'> {
   const chart = colorChart();
+  const signal = AbortSignal.timeout(timeoutSeconds * 1000);
   try {
     const response = await fetch(endpoint + '/chat/completions', {
-      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(20000),
+      method: 'POST', redirect: 'manual', signal,
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, temperature: 0, max_tokens: 512, response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: [
@@ -54,12 +56,15 @@ export async function verifyVision(endpoint: string, model: string, apiKey: stri
     });
     if (!response.ok || !response.body) {
       await response.body?.cancel();
-      return false;
+      return 'failed';
     }
     const bytes = await readLimited(response.body, 65536);
     const completion = JSON.parse(new TextDecoder().decode(bytes));
     const { colors } = JSON.parse(completion.choices[0].message.content);
-    return Array.isArray(colors) && colors.length === chart.colors.length &&
+    const matches = Array.isArray(colors) && colors.length === chart.colors.length &&
       chart.colors.every((color, i) => colors[i] === color);
-  } catch { return false; }
+    return matches ? 'passed' : 'failed';
+  } catch {
+    return signal.aborted ? 'timeout' : 'failed';
+  }
 }
