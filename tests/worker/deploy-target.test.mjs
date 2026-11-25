@@ -14,6 +14,8 @@ test('fresh installs with different Worker names use disjoint storage and exactl
   for (const name of ['joiask','another-box']) {
     const config = targetManifest(source,name);
     assert.equal(config.name,name);
+    assert.equal(config.keep_vars, true, 'redeploying must preserve the username configured as Text in the dashboard');
+    assert.ok(!config.secrets.required.some(key => key.startsWith('JOIASK_INITIAL_ADMIN_')));
     assert.equal(config.d1_databases[0].database_name,name + '-db');
     assert.equal(config.r2_buckets[0].bucket_name,name + '-files');
     assert.equal(config.queues.producers[0].queue,name + '-moderation');

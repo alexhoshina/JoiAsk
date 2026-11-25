@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { builtConfig, finished, root, startNode, wrangler, wranglerBin } from './worker-cli.mjs';
+import { finished, root, startNode, withLocalSecrets, wrangler, wranglerBin } from './worker-cli.mjs';
 
 const secretFile = path.join(root, '.dev.vars');
 try {
@@ -10,8 +10,10 @@ try {
 } catch (err) { if (err.code !== 'EEXIST') throw err; }
 await finished(startNode(path.join(root, 'scripts/build.mjs'), []));
 await wrangler('d1', 'migrations', 'apply', 'DB', '--local', '--config', 'wrangler.jsonc');
-const child = startNode(wranglerBin, ['dev', '--local', '--config', await builtConfig(), '--env-file', secretFile,
-  '--persist-to', path.join(root, '.wrangler/state'), ...process.argv.slice(2)]);
-process.on('SIGINT', () => child.kill('SIGINT'));
-process.on('SIGTERM', () => child.kill('SIGTERM'));
-await finished(child);
+await withLocalSecrets(secretFile, async config => {
+  const child = startNode(wranglerBin, ['dev', '--local', '--config', config, '--env-file', secretFile,
+    '--persist-to', path.join(root, '.wrangler/state'), ...process.argv.slice(2)]);
+  process.on('SIGINT', () => child.kill('SIGINT'));
+  process.on('SIGTERM', () => child.kill('SIGTERM'));
+  await finished(child);
+});

@@ -1,5 +1,6 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { ok, fail } from './common';
-import { hashPassword, verifyPassword } from './password.mjs';
+import { hashPassword, validInitialAdminCredentials, verifyPassword } from './password.mjs';
 import { fetchConfiguredProfile, profileFailureMessage } from './bilibili';
 import { AvatarUnavailable, createMemberWithAvatar } from './avatars';
 import { signature } from './signature';
@@ -14,6 +15,35 @@ export { currentAdmin, currentMember } from './identity-shared';
 const nowISO = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const allowedActor = 'EXISTS (SELECT 1 FROM admins actor WHERE actor.id=? AND actor.session_version=? AND actor.role=?)';
 const hasOtherSuper = "EXISTS (SELECT 1 FROM admins other WHERE other.role='super_admin' AND other.id<>admins.id)";
+
+interface InitialAdminBindings {
+  JOIASK_INITIAL_ADMIN_USERNAME?: string;
+  JOIASK_INITIAL_ADMIN_PASSWORD?: string;
+}
+
+function credentialDigest(username: string, password: string) {
+  return createHash('sha256').update(JSON.stringify([username, password])).digest();
+}
+
+async function authenticateAdmin(env: Env & InitialAdminBindings, username: string, password: string) {
+  const lookup = env.DB.prepare('SELECT * FROM admins WHERE username=?').bind(username);
+  let admin = await lookup.first<AdminRow>();
+  const { JOIASK_INITIAL_ADMIN_USERNAME: owner = '', JOIASK_INITIAL_ADMIN_PASSWORD: secret = '' } = env;
+  if (!admin && validInitialAdminCredentials(owner, secret)) {
+    const eligible = await env.DB.prepare('SELECT id FROM initial_admin_bootstrap WHERE id=1').first();
+    if (eligible) {
+      if (!timingSafeEqual(credentialDigest(username, password), credentialDigest(owner, secret))) return null;
+      // The insert and its trigger consume the site's single eligibility row atomically.
+      const created = await env.DB.prepare(`INSERT INTO admins(username,password_hash,role)
+        SELECT ?,?,'super_admin' FROM initial_admin_bootstrap WHERE id=1 AND NOT EXISTS (SELECT 1 FROM admins)
+        RETURNING *`).bind(username, await hashPassword(password)).first<AdminRow>();
+      if (created) return created;
+    }
+    // Another login or the operator CLI may have provisioned this username.
+    admin = await lookup.first<AdminRow>();
+  }
+  return admin && await verifyPassword(password, admin.password_hash) ? admin : null;
+}
 
 async function adminAccounts(req: Request, env: Env, path: string, actor: AdminRow) {
   const isSuper = actor.role === 'super_admin';
@@ -131,8 +161,8 @@ export async function identity(req: Request, env: Env): Promise<Response | null>
       const username = stringField(body, 'username');
       const password = stringField(body, 'password');
       if (!username || !password) return fail(400, '用户名和密码不能为空');
-      const admin = await env.DB.prepare('SELECT * FROM admins WHERE username=?').bind(username).first<AdminRow>();
-      if (!admin || !await verifyPassword(password, admin.password_hash)) return fail(401, '用户名或密码错误');
+      const admin = await authenticateAdmin(env, username, password);
+      if (!admin) return fail(401, '用户名或密码错误');
       return loginSession(req, env, admin, ok());
     }
     if (/^\/api\/(?:member|user)(?:\/[^/]+)?$/.test(path) || path === '/api/info' || path === '/api/logout') {

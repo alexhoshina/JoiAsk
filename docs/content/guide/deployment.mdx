@@ -18,9 +18,13 @@ node -e "const { randomBytes } = require('node:crypto'); const key = () => rando
 
 ### 首次部署与管理员
 
-新 D1 只在首次部署时接受可选的管理员凭据。要在发布时创建超级管理员，请在运行 `npm run deploy` 的终端或 CI 部署步骤中同时设置 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD`。在 CI 中将密码作为该步骤的保密环境变量注入。`--secrets-file` 文件中只放 Worker 运行所需的 `SESSION_SECRET` 和 `SETTINGS_KEY`。
+新站可在发布后从 Cloudflare 控制台创建首个超级管理员。使用部署按钮完成发布，或运行 `npm run deploy -- --secrets-file .dev.vars.production`，然后按以下步骤操作。
 
-以下 Bash 示例在子 shell 内输入密码并关闭命令跟踪。部署命令结束后，两个变量随子 shell 一起释放。
+1. 在 **Workers & Pages** 中打开目标 Worker，前往 **Settings → Variables and Secrets**，点击 **Add**。
+2. 添加 `JOIASK_INITIAL_ADMIN_USERNAME`，填入自选管理员名。类型可选 **Text**，普通访客无法从站点读取该变量。希望在控制台隐藏用户名时选 **Secret**。再添加 `JOIASK_INITIAL_ADMIN_PASSWORD`，类型选 **Secret**，填入自选密码。点击 **Deploy** 使设置生效。
+3. 访问该站点的 `/admin/`，使用这组凭据完成首次登录。成功后可以在同一设置页移除这两项，并点击 **Deploy**。请长期保留 `SESSION_SECRET` 和 `SETTINGS_KEY`。[Cloudflare 的 Worker Secret 操作指南](https://developers.cloudflare.com/workers/configuration/secrets/#via-the-dashboard)
+
+如果要在部署 CLI 中直接创建首个管理员，可以把同名环境变量提供给首次部署新 D1 的进程。在 CI 中把密码作为部署步骤的保密变量注入。以下 Bash 示例在子 shell 中提示输入密码，部署结束后释放这两个变量。
 
 ```bash
 (
@@ -33,7 +37,7 @@ node -e "const { randomBytes } = require('node:crypto'); const key = () => rando
 )
 ```
 
-也可以直接运行 `npm run deploy -- --secrets-file .dev.vars.production`，发布后再用管理员 CLI 创建账号。新库初始化时只填写一项会提示错误，请同时提供两项或都留空。初始化完成后可移除 CI 中的两个管理员变量，已有站点创建账号或重置密码请使用[管理员 CLI](./administrators.mdx)。
+通过部署 CLI 首建时要同时提供两项，创建成功后可移除 CI 中的管理员变量。已有站点创建、恢复或提升管理员请使用运维命令。[管理员 CLI](./administrators.mdx)
 
 保管好首次生成的密钥文件。后续发布复用相同的密钥，运行 `npm run deploy`。如果通过 `npm run deploy -- --name my-joiask --secrets-file .dev.vars.production` 指定 Worker 名称，远端管理命令也应携带 `--name my-joiask`，以选中该部署的 D1。发布前可以运行 `npm run deploy -- --dry-run` 在本地生成发布包。如果需要通过自定义域名访问，在 Cloudflare Workers 设置中绑定域名。构建前可以设置 `SITE_ORIGIN`（例如 `https://ask.example.com`），用于生成文档站点地图中的绝对链接。
 

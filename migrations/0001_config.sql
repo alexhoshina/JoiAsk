@@ -26,3 +26,7 @@ CREATE TABLE config (
 明显无意义、无法理解或与提问无关的内容'
 );
 INSERT INTO config (id) VALUES (1);
+
+-- Only a new site receives the one-time right to provision its first admin.
+CREATE TABLE initial_admin_bootstrap (id INTEGER PRIMARY KEY CHECK (id = 1));
+INSERT INTO initial_admin_bootstrap (id) VALUES (1);

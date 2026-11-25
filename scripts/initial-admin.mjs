@@ -1,10 +1,10 @@
 import { appendFile, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { hashPassword } from '../worker/password.mjs';
+import { hashPassword, validInitialAdminCredentials } from '../worker/password.mjs';
 
 async function initialAdminSQL(username, password) {
-  if (username?.trim() && !username.includes('\0') && password && !/[\r\n]/.test(password) && Buffer.byteLength(password) <= 4096) {
+  if (validInitialAdminCredentials(username, password)) {
     const text = value => "CAST(X'" + Buffer.from(value).toString('hex') + "' AS TEXT)";
     return `INSERT INTO admins(username,password_hash,role)
       SELECT ${text(username)},${text(await hashPassword(password))},'super_admin' WHERE NOT EXISTS (SELECT 1 FROM admins);`;

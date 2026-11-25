@@ -17,7 +17,9 @@ npm run dev
 
 ## 2. 创建本地管理员
 
-保持本地服务运行，在另一个终端执行：
+使用新建的本地 D1 时，也可以在仓库根目录的 `.dev.vars` 中加入 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD`，保留文件中原有的两个运行密钥。重启 `npm run dev` 后，用这组凭据登录 `/admin/`。登录成功即可从本地文件中移除两个管理员变量。
+
+使用管理员 CLI 时，保持本地服务运行，在另一个终端输入命令。
 
 在 PowerShell 7 中输入：
 
@@ -37,4 +39,4 @@ unset password
 
 ## 3. 发布站点
 
-发布到一个全新的 D1 时，可在 `npm run deploy` 的环境中设置 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD`，由部署命令一次性创建首个超级管理员。也可在部署后用上面的 CLI 命令，将 `--local` 换成 `--remote`。[首次部署示例](./deployment.mdx#首次部署与管理员)
+新站发布后，在 Cloudflare 控制台的目标 Worker 下打开 **Settings → Variables and Secrets**。用户名 `JOIASK_INITIAL_ADMIN_USERNAME` 选 **Text**，也可选 **Secret** 隐藏控制台中的值。密码 `JOIASK_INITIAL_ADMIN_PASSWORD` 选 **Secret**。点击 **Deploy** 后，用这组凭据登录站点的 `/admin/`。首次部署时也支持通过部署 CLI 的同名环境变量创建管理员。[首次部署示例](./deployment.mdx#首次部署与管理员)

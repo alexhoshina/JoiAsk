@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { access, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const wranglerBin = path.join(root, 'node_modules/wrangler/bin/wrangler.js');
@@ -105,4 +106,16 @@ export async function withDeployConfig(buildFile, config, run) {
   await writeFile(file, JSON.stringify(config), {flag:'wx', mode:0o600});
   try { return await run(file); }
   finally { await unlink(file); }
+}
+
+// With secrets.required configured, Wrangler dev only loads declared keys from the local file.
+export async function withLocalSecrets(secretFile, run) {
+  const file = await builtConfig();
+  const values = parseEnv(await readFile(secretFile, 'utf8'));
+  const optional = ['JOIASK_INITIAL_ADMIN_USERNAME', 'JOIASK_INITIAL_ADMIN_PASSWORD']
+    .filter(name => values[name]);
+  if (!optional.length) return run(file);
+  const config = JSON.parse(await readFile(file, 'utf8'));
+  config.secrets = { ...config.secrets, required: [...new Set([...(config.secrets?.required ?? []), ...optional])] };
+  return withDeployConfig(file, config, run);
 }

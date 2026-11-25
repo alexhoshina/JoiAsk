@@ -1,3 +1,7 @@
 # Generate two separate random 32-byte values. Set them as Worker secrets for deployment.
 SESSION_SECRET=
 SETTINGS_KEY=
+
+# Optional on a fresh installation. In the Workers dashboard use Text or Secret for the username and Secret for the password.
+JOIASK_INITIAL_ADMIN_USERNAME=
+JOIASK_INITIAL_ADMIN_PASSWORD=

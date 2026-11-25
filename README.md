@@ -31,7 +31,15 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fpowerlive-io%2FJoiAsk%2Ftree%2Fcodex%2Fcloudflare-workers)
 
-按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的 Cloudflare 账户，启用 R2，分别为 `SESSION_SECRET` 和 `SETTINGS_KEY` 提供独立随机密钥，每个至少 32 字节。模板会申请 D1、R2、Queue 和 Durable Object。使用按钮发布后，可以通过下面的管理员 CLI 创建超级管理员。
+按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的 Cloudflare 账户，启用 R2，分别为 `SESSION_SECRET` 和 `SETTINGS_KEY` 提供独立随机密钥，每个至少 32 字节。这两个 Worker 密钥需要长期保留。模板会申请 D1、R2、Queue 和 Durable Object。
+
+### 在 Cloudflare 控制台设置首个管理员
+
+1. 新站发布后，进入 **Workers & Pages → 站点对应的 Worker → Settings → Variables and Secrets**。
+2. 点击 **Add**。添加 `JOIASK_INITIAL_ADMIN_USERNAME`，类型选 **Text**，填入自选管理员名。若希望在控制台隐藏用户名，也可选 **Secret**。再添加 `JOIASK_INITIAL_ADMIN_PASSWORD`，类型选 **Secret**，填入自选密码。点击 **Deploy**。
+3. 打开站点的 `/admin/`，用上述用户名和密码登录。首次登录成功后，可从同一设置页移除这两项并再次点击 **Deploy**。以后继续使用已创建的账号登录。
+
+这两项仅用于新站首次创建超级管理员。用户名选 Text 时，普通访客也无法从站点读取这个变量。已有站点的账号恢复使用下面的管理员 CLI。
 
 ### 命令行部署
 
@@ -43,7 +51,7 @@ npx wrangler login
 node -e "const {randomBytes}=require('node:crypto'); const key=()=>randomBytes(32).toString('hex'); require('node:fs').writeFileSync('.dev.vars.production', 'SESSION_SECRET='+key()+'\nSETTINGS_KEY='+key()+'\n', {flag:'wx',mode:0o600})"
 ```
 
-新 D1 的首次部署可以同时创建超级管理员。以下 PowerShell 7 示例会提示输入密码，并在部署结束时清除两个临时环境变量。管理员凭据只提供给部署命令。`--secrets-file` 文件中仍只放 Worker 运行所需的 `SESSION_SECRET` 和 `SETTINGS_KEY`。
+使用命令行时，也可在首次部署新 D1 的同时创建超级管理员。以下 PowerShell 7 示例会提示输入密码，仅在本次部署进程中提供管理员凭据。`.dev.vars.production` 继续用于发布两个长期运行密钥。
 
 ```powershell
 $env:JOIASK_INITIAL_ADMIN_USERNAME = 'operator'
@@ -56,7 +64,7 @@ try {
 }
 ```
 
-如果想稍后创建账号，直接运行 `npm run deploy -- --secrets-file .dev.vars.production`。已有站点使用管理员 CLI 创建账号或重置密码。CLI 从标准输入读取密码，并使用与远程 Worker 相同的 D1 绑定配置。
+如果想在发布后从控制台设置首个管理员，直接运行 `npm run deploy -- --secrets-file .dev.vars.production` 即可。也可以使用管理员 CLI 创建账号或重置密码。CLI 从标准输入读取密码，并使用与远程 Worker 相同的 D1 绑定配置。
 
 PowerShell 7 创建账号的命令如下。
 

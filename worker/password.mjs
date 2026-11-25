@@ -1,6 +1,11 @@
 const encoder = new TextEncoder();
 const iterations = 100000;
 
+export function validInitialAdminCredentials(username, password) {
+  return typeof username === 'string' && username.trim().length > 0 && !username.includes('\0') &&
+    typeof password === 'string' && password.length > 0 && !/[\r\n]/.test(password) && encoder.encode(password).length <= 4096;
+}
+
 export function randomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), n => n.toString(16).padStart(2, '0')).join('');
 }
