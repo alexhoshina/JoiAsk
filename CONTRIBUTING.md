@@ -4,7 +4,7 @@
 
 ## 本地运行
 
-执行 `npm run dev` 来构建并启动完整站点。首次开发时脚本生成本地专用密钥并应用 D1 迁移。Worker 日志会显示本机地址，后台在 `/admin/`，文档在 `/docs/`。要创建本地超级管理员，在 PowerShell 7 中执行 `Read-Host -MaskInput '管理员密码' | node scripts/admin.mjs --local create operator`。开发数据默认保存在 `.wrangler/state`。
+在根目录按 `.dev.vars.example` 准备本地 `.dev.vars`，为 `SESSION_SECRET` 和 `SETTINGS_KEY` 各填写一个至少 32 字节的随机值。执行 `npm run dev` 构建站点、应用本地 D1 迁移并启动 Wrangler。Worker 日志会显示本机地址，后台在 `/admin/`，文档在 `/docs/`。要创建本地超级管理员，在 PowerShell 7 中执行 `Read-Host -MaskInput '管理员密码' | node cli/admin.ts --local create operator`。开发数据默认保存在 `.wrangler/state`。
 
 前台使用 vinext 服务端渲染，后台与文档在构建时导出。Worker 在同一入口处理 HTTP 请求、队列和定时维护，用 Durable Object 协调站点的在线连接。业务表结构通过 `migrations/` 下的有序 SQL 文件变更。更新绑定后执行 `npx wrangler types --include-runtime=false worker/bindings.d.ts` 并提交类型变化。
 
@@ -16,7 +16,8 @@ SMTP 集成测试会使用 OpenSSL 临时签发本地测试证书。Linux 和 ma
 npm run typecheck:worker
 npm run test:e2e:typecheck
 npm test
-npm run deploy -- --dry-run
+npm run build
+npm run check:deploy
 npm --prefix docs test
 npx playwright install chromium
 npm run test:e2e

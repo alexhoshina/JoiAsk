@@ -2,53 +2,55 @@
 title: "部署与更新"
 ---
 
-生产部署使用一个 Cloudflare Worker。Worker 在 `/` 呈现动态站点，在 `/api/` 处理 HTTP、WebSocket 与 SSE 请求，在 `/upload-img/` 读取 R2，并提供 `/admin/` 与 `/docs/` 的静态资源。
-
-## 更新已有站点
-
-在已安装依赖、已授权的项目目录中，使用原 Cloudflare 账号和 Worker 名称。以下命令更新名为 `my-joiask` 的站点。
-
-```sh
-npm run deploy -- --name my-joiask
-```
-
-使用仓库默认 Worker 名称的站点可直接运行 `npm run deploy`。部署命令会构建站点、应用 D1 迁移并发布，继续使用现有的 Worker 密钥和 D1 中的管理员账号。
+一个 Worker 提供提问箱、管理后台和文档。每个站点使用自己的 `wrangler.jsonc`，其中 `name` 选择 Worker，`DB`、`FILES` 和 `MODERATION` 分别绑定站点的 D1、R2 和审核队列。
 
 ## 首次部署与管理员
 
-### 准备资源
+### 使用部署按钮
 
-准备支持 D1、R2、Durable Objects 和 Queues 的 Cloudflare 账号并启用 R2。使用 Node.js 24，在仓库根目录安装依赖。如在本机初次使用 Wrangler，再登录目标账号。
+从 README 点击 **Deploy to Cloudflare**，选择账号和站点资源，启用 R2。将 **Build command** 留空，**Deploy command** 设为 `npm run release`。它会先构建，再对绑定的 D1 执行 SQL，成功后才发布代码。模板创建的仓库副本包含本站的资源配置。[Cloudflare 部署按钮](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
+
+给 `SESSION_SECRET` 和 `SETTINGS_KEY` 各填写一个独立的随机值，每个至少 32 字节。请在后续部署中继续使用这两个密钥。
+
+### 使用命令行
+
+安装 Node.js 24，启用目标账号的 R2，在仓库根目录运行以下命令。示例使用配置中的默认资源名。
 
 ```sh
 npm ci
 npx wrangler login
+npx wrangler d1 create joiask-db --binding DB --update-config
+npx wrangler r2 bucket create joiask-files --update-config=false
+npx wrangler queues create joiask-moderation
 ```
 
-站长需要为 `SESSION_SECRET` 和 `SETTINGS_KEY` 分别准备独立的随机密钥，每个至少 32 字节。如果目标 Worker 已在控制台配置这两个长期 Secret，首次发布 JoiAsk 也可直接使用上面的更新命令。通过命令行提供密钥时，准备一个私有文件（例如仓库根目录的 `.dev.vars.production`），按每行一个 `名称=值` 的格式填写两项。将文件保存在受限位置并妥善备份。
+Wrangler 会把数据库 ID 写入 `wrangler.jsonc` 的 `DB` 绑定。使用自选名称时，先在同一文件设置 Worker 的 `name`、D1 的 `database_name` 和 R2 的 `bucket_name`，并在创建命令中使用对应的资源名。审核队列的生产者与消费者要填写相同的队列名。多个站点各自使用独立资源。
 
-### 构建与发布
-
-选择目标 Worker 名称。以下命令使用自备的密钥文件首次发布到 `my-joiask`。
+准备私有文件 `.dev.vars.production`，分别以 `SESSION_SECRET=值` 和 `SETTINGS_KEY=值` 填写两个长期密钥。首次发布执行：
 
 ```sh
-npm run deploy -- --name my-joiask --secrets-file .dev.vars.production
+npm run release -- --secrets-file .dev.vars.production
 ```
 
-部署命令会按仓库根目录的 `wrangler.jsonc` 准备资源。CI 可使用有相应资源权限的 Cloudflare API token 与账号 ID 授权。如果使用仓库的 Cloudflare 部署按钮，可在安装时提供上述两个 Worker 密钥，发布完成后继续设置管理员。
+若这两个 Secret 已经在目标 Worker 配置好，可以直接运行 `npm run release`。在 CI 中，为 Wrangler 提供能访问目标账号及资源的 Cloudflare API token。
 
 ### 在控制台设置首个管理员
 
-1. 在 **Workers & Pages** 中打开目标 Worker，前往 **Settings → Variables and Secrets**，点击 **Add**。
-2. 添加 `JOIASK_INITIAL_ADMIN_USERNAME`，填入自选管理员名。类型可选 **Text**，普通访客无法从站点读取该变量。希望在控制台隐藏用户名时选 **Secret**。再添加 `JOIASK_INITIAL_ADMIN_PASSWORD`，类型选 **Secret**，填入自选密码。点击 **Deploy** 使设置生效。
-3. 访问该站点的 `/admin/`，使用这组凭据完成首次登录。成功后可以在同一设置页移除这两项，并点击 **Deploy**。请长期保留 `SESSION_SECRET` 和 `SETTINGS_KEY`。[Cloudflare 的 Worker Secret 操作指南](https://developers.cloudflare.com/workers/configuration/secrets/#via-the-dashboard)
+1. 打开目标 Worker 的 **Settings → Variables and Secrets**。
+2. 添加 `JOIASK_INITIAL_ADMIN_USERNAME`（Text 或 Secret）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（Secret），点击 **Deploy**。
+3. 访问 `/admin/`，用上述凭据首次登录。创建成功后可移除这两项，再点击 **Deploy**。已有账号可通过[管理员 CLI](./administrators.mdx)恢复。
 
-需要在首次发布时由命令行创建账号，或给已有站点重置管理员密码，可参阅[管理员指南](./administrators.mdx)。
+也可以把这两项作为 Worker Secret 随首次发布的 `--secrets-file` 一起上传。账号在首次登录时创建。
 
-## 发布选项
+## 更新和预检
 
-发布前可运行 `npm run deploy -- --name my-joiask --dry-run` 在本地生成发布包。自定义域名可在目标 Worker 的设置中绑定。构建前设置 `SITE_ORIGIN`（例如 `https://ask.example.com`），可以为文档站点地图生成对应域名的绝对链接。远端管理命令也使用相同的 `--name my-joiask`，以选中该站点的 D1。
+在站点自己的仓库中运行 `npm ci` 和 `npm run release`。单独检查构建与上传包时，在本地运行：
 
-## 上线验证与回退
+```sh
+npm run build
+npm run check:deploy
+```
 
-访问首页、管理后台和本文档，检查站点标题、登录与投稿；上传测试图片并观察另一个浏览器中的实时表情。生产 SMTP 与 B 站签名读取需要从实际 Worker 的出口验证。变更数据库前导出 D1 备份，发布兼容的结构迁移后再切换 Worker 版本。Workers 的版本回退只改变代码，已写入的 D1 和 R2 数据需要单独处理。
+`build` 产生 Worker 和静态资源，`deploy` 将已构建的产物交给 Wrangler。两个预检步骤都只操作本地文件。自定义域名可在目标 Worker 的设置中绑定。构建前设置 `SITE_ORIGIN`（例如 `https://ask.example.com`），文档站点地图将使用对应域名。
+
+发布后可访问 `/`、`/admin/` 和 `/docs/`，并用两个浏览器检查投稿与实时互动。SMTP 送达和 B 站签名读取需在实际部署环境验证。

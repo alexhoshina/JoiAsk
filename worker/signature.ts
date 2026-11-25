@@ -1,5 +1,5 @@
 import { ok, fail } from './common';
-import { hashPassword, randomHex } from './password.mjs';
+import { hashPassword, randomHex } from './password.ts';
 import { fetchConfiguredProfile, profileFailureMessage } from './bilibili';
 import { createMemberWithAvatar } from './avatars';
 import {

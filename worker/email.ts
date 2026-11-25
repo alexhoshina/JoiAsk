@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { decryptSecret, fail, ok } from './common';
 import type { Settings } from './settings';
-import { hashPassword, randomHex, verifyPassword } from './password.mjs';
+import { hashPassword, randomHex, verifyPassword } from './password.ts';
 import {
   conflict, currentMember, digestKey, jsonObject, publicMember, requesterIP, signInRequired,
   stringField, validMemberPassword, type MemberRow

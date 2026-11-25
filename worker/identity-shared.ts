@@ -1,4 +1,4 @@
-import { randomHex } from './password.mjs';
+import { randomHex } from './password.ts';
 import { fail } from './common';
 
 export type AdminRow = {

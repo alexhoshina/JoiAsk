@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { ok, fail } from './common';
-import { hashPassword, validInitialAdminCredentials, verifyPassword } from './password.mjs';
+import { hashPassword, validInitialAdminCredentials, verifyPassword } from './password.ts';
 import { fetchConfiguredProfile, profileFailureMessage } from './bilibili';
 import { AvatarUnavailable, createMemberWithAvatar } from './avatars';
 import { signature } from './signature';

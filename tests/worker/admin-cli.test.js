@@ -4,11 +4,14 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { wranglerBin, root } from '../../scripts/worker-cli.mjs';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const wranglerBin = join(root, 'node_modules/wrangler/bin/wrangler.js');
 
 test('explicit admin provisioning, recovery and promotion against a fresh local D1', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'joiask-operator-test-'));
-  const local = ['--local', '--persist-to', directory, '--config', join(root, 'wrangler.jsonc')];
+  const local = ['--local', '--persist-to', directory];
   function run(file, args, input) {
     return spawnSync(process.execPath, [file, ...args], {
       cwd: root, input, encoding: 'utf8', windowsHide: true,
@@ -22,7 +25,7 @@ test('explicit admin provisioning, recovery and promotion against a fresh local 
   }
   const username = "operator's account";
   function operator(command, input, name = username) {
-    return run(join(root, 'scripts/admin.mjs'), [...local, command, name], input);
+    return run(join(root, 'cli/admin.ts'), [...local, command, name], input);
   }
   try {
     let result = run(wranglerBin, ['d1', 'migrations', 'apply', 'DB', ...local]);

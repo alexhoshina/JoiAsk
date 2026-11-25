@@ -7,8 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { unstable_splitSqlQuery } from 'wrangler';
-import { applySiteMigrations } from '../../scripts/deploy.mjs';
-import { hashPassword, verifyPassword } from '../../worker/password.mjs';
+import { hashPassword, verifyPassword } from '../../worker/password.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const migrations = path.join(root, 'migrations');
@@ -48,8 +47,8 @@ async function fixture(t, bindings = secrets) {
   async function runSQL(sql) {
     await db.batch(unstable_splitSqlQuery(sql).map(statement => db.prepare(statement)));
   }
-  async function migrate(names = files, dir = migrations) {
-    for (const name of names) await runSQL(await readFile(path.join(dir, name), 'utf8'));
+  async function migrate(names = files) {
+    for (const name of names) await runSQL(await readFile(path.join(migrations, name), 'utf8'));
   }
   async function call(url, data, method = data ? 'POST' : 'GET', cookie = '') {
     const res = await runtime.dispatchFetch('https://site.example.test' + url, {
@@ -145,28 +144,6 @@ test('missing or invalid Worker secrets cannot create an account or consume a fr
   assert.equal((await app.accounts()).length, 1);
   await app.rebind({});
   assert.equal((await app.login()).body.code, 200, 'removing the initial bindings must preserve password login');
-});
-
-test('deployment CLI initialization permanently closes the runtime fallback even if the last owner is deleted before first login', async t => {
-  const app = await fixture(t);
-  const dbBinding = { binding: 'DB', migrations_dir: migrations };
-  const cli = { async wrangler(...args) {
-    const configFile = args[args.indexOf('--config') + 1];
-    const config = JSON.parse(await readFile(configFile, 'utf8'));
-    const dir = path.resolve(path.dirname(configFile), config.d1_databases[0].migrations_dir);
-    await app.migrate(app.files, dir);
-  } };
-  await applySiteMigrations(path.join(root, 'wrangler.jsonc'), { name: 'test-runtime-bootstrap' }, dbBinding,
-    cli, 'cli-owner', 'fixture-cli-password-1473');
-  const accounts = await app.accounts();
-  assert.equal(accounts.length, 1);
-  assert.equal(accounts[0].username, 'cli-owner');
-  assert.equal(await verifyPassword('fixture-cli-password-1473', accounts[0].password_hash), true);
-  await app.db.prepare('DELETE FROM admins').run();
-  const failed = await app.login();
-  assert.equal(failed.body.code, 401);
-  assertPrivate(failed);
-  assert.deepEqual(await app.accounts(), []);
 });
 
 test('an operator-created administrator prevents runtime recovery after deletion without any intervening login', async t => {

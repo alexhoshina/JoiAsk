@@ -31,7 +31,8 @@ jobs:
       - run: npm run typecheck:worker
       - run: npm run test:e2e:typecheck
       - run: npm test
-      - run: npm run deploy -- --dry-run
+      - run: npm run build
+      - run: npm run check:deploy
       - run: npm --prefix docs test
       - run: npx tsc --noEmit -p frontend && npx tsc --noEmit -p admin
       - run: npm --prefix frontend run lint && npm --prefix admin run lint

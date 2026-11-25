@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test as base, expect, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
-import { adminCredentials, baseURL as workerURL } from './environment.mjs';
+import { adminCredentials, baseURL as workerURL } from './environment.js';
 
 type Tag = { id: number; tag_name: string; description: string };
 type Question = {

@@ -28,7 +28,7 @@ export default async function Page({ params }: Props) {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        {/* Relative .mdx links resolve to page URLs; tests/site.test.mjs catches any that do not. */}
+        {/* Relative .mdx links resolve to page URLs. */}
         <MDX components={getMDXComponents({ a: createRelativeLink(source, page) })} />
       </DocsBody>
       <div className="flex flex-row flex-wrap items-center justify-between gap-4 border-t pt-6">

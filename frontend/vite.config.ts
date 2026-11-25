@@ -1,3 +1,4 @@
+import { cp } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -19,6 +20,16 @@ export default defineConfig({
     },
   },
   plugins: [
+    {
+      name: "joiask-static-sites",
+      apply: "build",
+      applyToEnvironment: (environment) => environment.name === "client",
+      async writeBundle() {
+        for (const site of ["admin", "docs"]) {
+          await cp(path.join(root, site, "out"), path.join(root, "dist/client", site), { recursive: true });
+        }
+      },
+    },
     vinext({
       clientOutDir: path.join(root, "dist/client"),
       rscOutDir: path.join(root, "dist/server"),

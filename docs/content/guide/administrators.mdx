@@ -2,35 +2,16 @@
 title: "管理员与密码恢复"
 ---
 
-新安装没有默认管理员或默认密码。运维 CLI 使用 Wrangler 凭据直接访问指定 D1。本地开发使用 `--local`，已部署的站点使用 `--remote`。生产操作前检查当前 Cloudflare 账号和资源名称。
+新安装没有默认管理员或默认密码。新站发布后，在 Worker 的 **Settings → Variables and Secrets** 中添加 `JOIASK_INITIAL_ADMIN_USERNAME`（Text 或 Secret）和 `JOIASK_INITIAL_ADMIN_PASSWORD`（Secret）。点击 **Deploy** 后，用这组凭据登录 `/admin/` 即可创建首个超级管理员。创建成功后可移除这两项。[首次部署说明](./deployment.mdx#首次部署与管理员)
 
-新站发布后，可在目标 Worker 的 **Settings → Variables and Secrets** 添加首个管理员凭据。用户名 `JOIASK_INITIAL_ADMIN_USERNAME` 选 **Text**，也可选 **Secret** 隐藏控制台中的值。密码 `JOIASK_INITIAL_ADMIN_PASSWORD` 选 **Secret**。点击 **Deploy** 后，用这组凭据登录 `/admin/`。首个超级管理员只创建一次，成功后可移除这两项。部署 CLI 同样支持这组环境变量。已有站点需要创建、恢复或提升管理员时请使用下面的运维 CLI，包括管理员账号已全部删除的情况。[首次部署示例](./deployment.mdx#首次部署与管理员)
+管理员 CLI 通过仓库根目录 `wrangler.jsonc` 的 `DB` 绑定访问数据库。使用站点自己的仓库，在本地开发时选 `--local`，在远端管理时选 `--remote`。
 
-以下是 PowerShell 7 中创建、重置与提升权限的命令。创建与重置会从管道读取掩码输入的密码。
+以下命令分别用于新建超级管理员、重置管理员密码和提升已有管理员的权限。PowerShell 7 会隐藏输入的密码。重置密码会撤销该账号的现有会话。
 
 ```powershell
-Read-Host -MaskInput '初始密码' | node scripts/admin.mjs --remote create site-admin
-Read-Host -MaskInput '新密码' | node scripts/admin.mjs --remote reset-password site-admin
-node scripts/admin.mjs --remote promote site-admin
+Read-Host -MaskInput '初始密码' | node cli/admin.ts --remote create site-admin
+Read-Host -MaskInput '新密码' | node cli/admin.ts --remote reset-password site-admin
+node cli/admin.ts --remote promote site-admin
 ```
 
-Bash 用户可以参考[快速开始](./quick-start.mdx)中的掩码输入示例，将目标改为 `--remote`。如果部署指定了 Worker 名称，在远端管理命令中使用相同的 `--name <Worker 名称>`。如果使用自定义 Wrangler 配置，请给命令添加 `--config <路径>`，并确认其中的 `DB` 绑定与实际运行的 Worker 一致。重置密码会撤销已有管理员会话。
-
-超级管理员在管理后台管理管理员账号。普通会员可在前台使用绑定的邮箱重置密码。流程见[投稿与邮箱](./usage.mdx)。
-
-## 在首次部署时从命令行创建管理员
-
-对于使用全新 D1 的站点，也可以让部署命令一次性创建首个超级管理员。在 CI 中把 `JOIASK_INITIAL_ADMIN_USERNAME` 和 `JOIASK_INITIAL_ADMIN_PASSWORD` 同时提供给部署步骤，密码通过 CI 的保密变量传入。首建成功后即可移除这两个变量。
-
-在本机 Bash 中，使用已准备好的生产密钥文件运行以下示例。将 `my-joiask` 替换为目标 Worker 名称。管理员密码通过隐藏提示输入，部署结束后变量随子 shell 一起释放。
-
-```bash
-(
-  set +x
-  export JOIASK_INITIAL_ADMIN_USERNAME=site-admin
-  IFS= read -rs -p '首个管理员密码：' JOIASK_INITIAL_ADMIN_PASSWORD || exit 1
-  printf '\n'
-  export JOIASK_INITIAL_ADMIN_PASSWORD
-  npm run deploy -- --name my-joiask --secrets-file .dev.vars.production
-)
-```
+Bash 的掩码输入示例见[快速开始](./quick-start.mdx)。全部管理员账号都被删除时，可通过 CLI 重新创建超级管理员。普通会员可使用已绑定的邮箱找回密码。[投稿与邮箱](./usage.mdx)

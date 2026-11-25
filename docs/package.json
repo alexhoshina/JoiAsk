@@ -2,12 +2,13 @@
   "name": "joiask-docs",
   "private": true,
   "type": "module",
+  "postcss": { "plugins": { "@tailwindcss/postcss": {} } },
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
     "preview": "serve out",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --test tests/site.test.mjs"
+    "test": "node --test"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

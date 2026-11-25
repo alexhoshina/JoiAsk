@@ -31,7 +31,7 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fpowerlive-io%2FJoiAsk%2Ftree%2Fcodex%2Fcloudflare-workers)
 
-按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的 Cloudflare 账户，启用 R2，分别为 `SESSION_SECRET` 和 `SETTINGS_KEY` 提供独立随机密钥，每个至少 32 字节。这两个 Worker 密钥需要长期保留。模板会申请 D1、R2、Queue 和 Durable Object。
+按钮从公开的 `codex/cloudflare-workers` 分支读取模板。选择自己的账号，为这个站点选择 D1、R2 和审核队列，并填写两个长期 Secret：`SESSION_SECRET` 和 `SETTINGS_KEY`。两项各使用独立的随机值，每个至少 32 字节。在按钮的构建设置中，将 **Build command** 留空，**Deploy command** 设为 `npm run release`。这个命令会依次构建站点、初始化数据库并发布 Worker。
 
 ### 在 Cloudflare 控制台设置首个管理员
 
@@ -43,27 +43,31 @@
 
 ### 命令行部署
 
-**更新已有站点。** 在已安装依赖、已登录 Wrangler 的仓库根目录执行以下命令。将 `my-joiask` 换成部署时使用的 Worker 名称。
+使用 Node.js 24。在仓库根目录安装依赖，登录 Cloudflare，并为新站创建资源。以下示例使用 `wrangler.jsonc` 中的默认资源名。
 
 ```sh
-npm run deploy -- --name my-joiask
+npm ci
+npx wrangler login
+npx wrangler d1 create joiask-db --binding DB --update-config
+npx wrangler r2 bucket create joiask-files --update-config=false
+npx wrangler queues create joiask-moderation
 ```
 
-部署命令会完成构建和 D1 迁移。目标 Worker 已配置 `SESSION_SECRET` 和 `SETTINGS_KEY` 时，首次发布本项目和后续更新都可以沿用面板里的密钥。使用默认名称 `joiask` 的站点直接运行 `npm run deploy` 即可。
-
-**首次部署新站。** 使用 Node.js 24，在仓库根目录执行 `npm ci`。交互式部署前，通过 `npx wrangler login` 登录目标账号。自行准备两个独立的随机密钥，每个至少 32 字节。在本地 `.dev.vars.production` 文件中分别填写 `SESSION_SECRET` 和 `SETTINGS_KEY`，然后发布。[密钥文件格式](./docs/content/guide/deployment.mdx)
+Wrangler 会把数据库 ID 写入根目录的 `wrangler.jsonc`。如果要用自选名称，先在配置和创建命令中填好本站的 Worker 与资源名称。首次发布时在私有文件 `.dev.vars.production` 中填写上述两个长期 Secret。
 
 ```sh
-npm run deploy -- --name my-joiask --secrets-file .dev.vars.production
+npm run release -- --secrets-file .dev.vars.production
 ```
 
 发布成功后，按上面的控制台步骤设置首个管理员。提问箱位于 `/`，管理后台位于 `/admin/`，文档位于 `/docs/`。站长可在后台配置通用 SMTP 和兼容 Chat Completions 的审核服务。会员通过 B 站公开个性签名验证 UID，验证成功即可恢复原签名。
 
 默认从 B 站原生名片接口读取资料。使用自建反代时，超级管理员在后台「设置」填入完整接口地址（例如 `https://bili.example.com/card`），Worker 会自动附上 `mid` 查询参数。[配置说明](./docs/content/guide/configuration.mdx)
 
-同一个 Cloudflare 账号安装多个站点时，为每个实例选择独立的 Worker 名称。例如在部署命令中加入 `--name my-ask`，管理命令也使用 `--remote --name my-ask`。通过按钮定制了资源名称的站点，请在按钮创建的仓库副本中执行运维命令，以便读取该站点的绑定。
+后续更新运行 `npm run release`。每个站点使用自己的配置及独立资源。按钮安装的站点使用 Cloudflare 创建的仓库副本进行更新和管理。[完整部署说明](./docs/content/guide/deployment.mdx)
 
 ### 本地开发
+
+在根目录按 `.dev.vars.example` 创建 `.dev.vars`，给两个长期密钥填入本地专用随机值，然后运行：
 
 ```sh
 npm ci

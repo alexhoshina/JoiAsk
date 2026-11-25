@@ -5,9 +5,8 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
-    "allowJs": true,
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["./**/*.ts", "./environment.mjs", "../../playwright.config.ts"]
+  "include": ["./**/*.ts", "../../playwright.config.ts"]
 }

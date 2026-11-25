@@ -1,5 +1,5 @@
 import { test, expect, loginAdmin } from './fixtures.js';
-import { adminCredentials } from './environment.mjs';
+import { adminCredentials } from './environment.js';
 
 test('未登录访问管理页面会返回登录页', async ({ page }) => {
   await page.goto('/admin/dashboard/questions/');

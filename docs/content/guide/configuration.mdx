@@ -6,7 +6,7 @@ title: "数据库、存储与安全配置"
 
 ## 站点密钥
 
-为 `SESSION_SECRET` 和 `SETTINGS_KEY` 分别生成独立随机值，通过 Wrangler Secrets 保存。会话密钥用于登录状态，设置密钥保护 SMTP 密码和审核服务 API 密钥。首次本地运行会在被 Git 忽略的 `.dev.vars` 中创建本地密钥。备份生产密钥；更换设置密钥后，已有的加密配置需要重新录入。
+为 `SESSION_SECRET` 和 `SETTINGS_KEY` 分别准备至少 32 字节的独立随机值，保存为 Worker Secret。会话密钥用于登录状态，设置密钥保护 SMTP 密码和审核服务 API 密钥。本地开发时把单独的开发密钥填入根目录的 `.dev.vars`。请备份生产密钥，更换设置密钥后需要重新录入已加密的配置。
 
 新站可添加两项 Worker 设置来创建首个超级管理员。用户名 `JOIASK_INITIAL_ADMIN_USERNAME` 选 **Text**，若要在控制台隐藏用户名也可选 **Secret**。密码 `JOIASK_INITIAL_ADMIN_PASSWORD` 选 **Secret**。首次登录成功后可移除这两项，同时保留上面的两个长期密钥。[首次部署与管理员](./deployment.mdx#首次部署与管理员)
 

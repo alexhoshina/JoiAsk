@@ -7,9 +7,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { hashPassword } from '../../worker/password.mjs';
+import { hashPassword } from '../../worker/password.ts';
 import { encryptSecret } from '../../worker/common.ts';
-import { localCertificates } from './smtp-certificates.mjs';
+import { localCertificates } from './smtp-certificates.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const domain = 'https://ask.example';
